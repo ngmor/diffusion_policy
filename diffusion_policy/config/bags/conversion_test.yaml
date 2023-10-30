@@ -1,0 +1,12 @@
+name: conversion_test
+
+output_path: data/conversions/out_test
+
+hydra:
+  job:
+    override_dirname: ${name}
+  run:
+    dir: data/outputs/${now:%Y.%m.%d}/${now:%H.%M.%S}_${name}
+  sweep:
+    dir: data/outputs/${now:%Y.%m.%d}/${now:%H.%M.%S}_${name}
+    subdir: ${hydra.job.num}
