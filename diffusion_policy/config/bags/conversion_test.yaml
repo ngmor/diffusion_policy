@@ -16,7 +16,15 @@ joint_states:
         position: low_dim
         velocity: low_dim
         effort: low_dim
+      - name: after_1
+        position: low_dim
+        velocity: low_dim
+        effort: low_dim
       - name: before_2
+        position: low_dim
+        velocity: low_dim
+        effort: low_dim
+      - name: after_2
         position: low_dim
         velocity: low_dim
         effort: low_dim
@@ -24,6 +32,28 @@ joint_states:
         position: low_dim
         velocity: low_dim
         effort: low_dim
+      - name: after_3
+        position: low_dim
+        velocity: low_dim
+        effort: low_dim
+      - name: x
+        position: low_dim
+        velocity: low_dim
+        effort: action
+      - name: y
+        position: low_dim
+        velocity: low_dim
+        effort: action
+      - name: z
+        position: low_dim
+        velocity: low_dim
+        effort: action
+      - name: gimbal_x
+        position: low_dim
+      - name: gimbal_y
+        position: low_dim
+      - name: gimbal_z
+        position: low_dim
 
 
 hydra:
