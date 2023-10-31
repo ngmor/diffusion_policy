@@ -8,6 +8,7 @@ name: conversion_test
 input_path: bags/combined
 output_path: bags/converted/${name}
 rate: 10.0 # Hz
+image_shape: [240, 320, 3] # H, W, C
 
 joint_states:
   - topic: /omnid1/joint/joint_states
@@ -62,6 +63,14 @@ twists:
       y: low_dim
     angular:
       z: low_dim
+
+images:
+  - topic: /overhead_camera/color/image_raw/compressed
+    shape: ${image_shape}
+  - topic: /horizontal_camera/color/image_raw/compressed
+    shape: ${image_shape}
+  - topic: /onboard_camera/color/image_raw/compressed
+    shape: ${image_shape}
 
 hydra:
   output_subdir: null

@@ -10,6 +10,8 @@ from omegaconf import OmegaConf
 
 import sensor_msgs.msg
 import geometry_msgs.msg
+from cv_bridge import CvBridge
+import cv2
 
 from diffusion_policy.common.replay_buffer import ReplayBuffer
 
@@ -85,6 +87,7 @@ def main(cfg: OmegaConf):
     topics = []
     low_dim_obs_names = []
     actions_names = []
+    camera_names = []
 
     # Determine where to place joint state data according to configuration
     joint_states = {}
@@ -151,6 +154,18 @@ def main(cfg: OmegaConf):
                 actions_list=actions_names
             )
 
+    # Find image topics in configuration
+    camera_shapes = {}
+    if hasattr(cfg, 'images'):
+        for topic in cfg.images:
+            topics.append(topic.topic)
+            split_name = topic.topic.split('/')
+            camera_name = split_name[1] if split_name[0] == '' else split_name[0]
+            camera_names.append(camera_name)
+            camera_shapes[camera_name] = topic.shape
+
+    bridge = CvBridge()
+
     # Collect data from bags (each is an episode)
     for bag in pathlib.Path(cfg.input_path).iterdir():
         # Skip anything that isn't a directory since this isn't a ROS bag
@@ -170,6 +185,12 @@ def main(cfg: OmegaConf):
             DataType.LOW_DIM_OBS: np.zeros((len(episode_data), len(low_dim_obs_names)), dtype=np.float32),
             DataType.ACTION: np.zeros((len(episode_data), len(actions_names)), dtype=np.float32),
         }
+
+        # Init camera data arrays
+        # TODO is there a better way to handle this to save RAM?
+        camera_data_arrays = {}
+        for camera, shape in camera_shapes.items():
+            camera_data_arrays[camera] = np.zeros((len(episode_data), *shape), dtype=np.uint8)
 
         # interpret all data for each timestep
         for t in range(len(episode_data)):
@@ -234,6 +255,25 @@ def main(cfg: OmegaConf):
             # Offset the number of topics by the number of twists topics
             topics_ndx_offset += len(twists.keys())
 
+            # PROCESS IMAGES
+            for i, camera_name in enumerate(camera_names):
+                ndx = topics_ndx_offset + i
+
+                # Get camera shape
+                shape = camera_shapes[camera_name]
+
+                # Get message from data frame
+                image_msg: sensor_msgs.msg.CompressedImage = data_frame[ndx]
+
+                # Convert to cv2 image
+                image = bridge.compressed_imgmsg_to_cv2(image_msg)
+                
+                # Resize
+                image = cv2.resize(image, (shape[1], shape[0]))
+
+                # Store
+                camera_data_arrays[camera_name][t] = image
+
 
             # Process timesteps
             data_arrays[DataType.TIMESTEP][t] = data_frame[-1]
@@ -244,6 +284,17 @@ def main(cfg: OmegaConf):
             'low_dim_obs': data_arrays[DataType.LOW_DIM_OBS],
             'action': data_arrays[DataType.ACTION],
         }
+
+        # TODO remove
+        # for t in range(len(episode_data)):
+        #     for camera, data in camera_data_arrays.items():
+        #         cv2.imshow(camera, data[t])
+        #     cv2.waitKey(1)
+        #     import time
+        #     time.sleep(1.0/cfg.rate)
+
+        # Add camera data
+        episode_data_dict.update(camera_data_arrays)
 
         # Add episode to replay buffer
         replay_buffer.add_episode(episode_data_dict, compressors='disk')
