@@ -7,7 +7,7 @@ name: conversion_test
 
 input_path: bags/combined
 output_path: bags/converted/${name}
-rate: 10 # Hz
+rate: 10.0 # Hz
 
 joint_states:
   - topic: /omnid1/joint/joint_states
@@ -55,6 +55,13 @@ joint_states:
       - name: gimbal_z
         position: low_dim
 
+twists:
+  - topic: /omnid1/cmd_vel
+    linear:
+      x: low_dim
+      y: low_dim
+    angular:
+      z: low_dim
 
 hydra:
   output_subdir: null

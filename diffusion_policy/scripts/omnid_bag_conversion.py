@@ -8,6 +8,7 @@ import hydra
 from omegaconf import OmegaConf
 
 import sensor_msgs.msg
+import geometry_msgs.msg
 
 from diffusion_policy.common.replay_buffer import ReplayBuffer
 
@@ -37,7 +38,7 @@ class DataLocator:
     def ndx(self) -> int:
         return self._ndx
 
-def add_scalar_attribute(obj: Any, attr: str, namespace: str, locator_dict: dict, low_dim_obs_list: list, actions_list: list):
+def place_scalar_attribute(obj: Any, attr: str, namespace: str, locator_dict: dict, low_dim_obs_list: list, actions_list: list):
     if hasattr(obj, attr):
         full_name = namespace + '.' + attr
 
@@ -52,6 +53,19 @@ def add_scalar_attribute(obj: Any, attr: str, namespace: str, locator_dict: dict
         
         locator_dict[attr] = DataLocator(dtype, len(out_list))
         out_list.append(full_name)
+
+# TODO make this recursive?
+def place_sub_attributes(obj: Any, attr: str, sub_attrs: list, namespace: str, locator_dict: dict, low_dim_obs_list: list, actions_list: list):
+    if hasattr(obj, attr):
+        full_name = namespace + '.' + attr
+
+        temp_dict = {}
+
+        for sub_attr in sub_attrs:
+            place_scalar_attribute(getattr(obj, attr), sub_attr, full_name, temp_dict, low_dim_obs_list, actions_list)
+
+        if len(temp_dict.keys()) > 0:
+            locator_dict[attr] = temp_dict
 
 @hydra.main(
     version_base=None,
@@ -84,7 +98,7 @@ def main(cfg: OmegaConf):
 
                 namespace = topic.topic + '.' + joint.name
 
-                add_scalar_attribute(
+                place_scalar_attribute(
                     obj=joint,
                     attr='position',
                     namespace=namespace,
@@ -92,7 +106,7 @@ def main(cfg: OmegaConf):
                     low_dim_obs_list=low_dim_obs_names,
                     actions_list=actions_names
                 )
-                add_scalar_attribute(
+                place_scalar_attribute(
                     obj=joint,
                     attr='velocity',
                     namespace=namespace,
@@ -100,7 +114,7 @@ def main(cfg: OmegaConf):
                     low_dim_obs_list=low_dim_obs_names,
                     actions_list=actions_names
                 )
-                add_scalar_attribute(
+                place_scalar_attribute(
                     obj=joint,
                     attr='effort',
                     namespace=namespace,
@@ -109,14 +123,45 @@ def main(cfg: OmegaConf):
                     actions_list=actions_names
                 )
 
+    # Determine where to place twist data according to configuration
+    twists = {}
+    if hasattr(cfg, 'twists'):
+        for topic in cfg.twists:
+            topics.append(topic.topic)
+
+            twists[topic.topic] = {}
+
+            place_sub_attributes(
+                obj=topic,
+                attr='linear',
+                sub_attrs=['x','y','z'],
+                namespace=topic.topic,
+                locator_dict=twists[topic.topic],
+                low_dim_obs_list=low_dim_obs_names,
+                actions_list=actions_names
+            )
+            place_sub_attributes(
+                obj=topic,
+                attr='angular',
+                sub_attrs=['x','y','z'],
+                namespace=topic.topic,
+                locator_dict=twists[topic.topic],
+                low_dim_obs_list=low_dim_obs_names,
+                actions_list=actions_names
+            )
+
     # Collect data from bags (each is an episode)
     for bag in pathlib.Path(cfg.input_path).iterdir():
         # Skip anything that isn't a directory since this isn't a ROS bag
         if not bag.is_dir():
             continue
 
+        print(f'Converting episode {replay_buffer.n_episodes + 1}:\t{bag.name}', end='')
+
         # Decimate data according to configured rate
         episode_data = decimate(str(bag), topics, cfg.rate)
+
+        print(f'\t{len(episode_data)} data frames\t\t{len(episode_data)/cfg.rate} sec')
 
         # Map from data types to output data arrays
         data_arrays = {
@@ -131,7 +176,7 @@ def main(cfg: OmegaConf):
 
             topics_ndx_offset = 0
 
-            # Process joint states
+            # PROCESS JOINT STATES
             for i in range(len(joint_states.keys())):
                 # Index in topics and data frame
                 ndx = topics_ndx_offset + i
@@ -160,6 +205,34 @@ def main(cfg: OmegaConf):
                     if 'effort' in joint_state_map[joint].keys():
                         locator = joint_state_map[joint]['effort']
                         data_arrays[locator.dtype][t, locator.ndx] = joint_state_msg.effort[j]
+            
+            # Offset the number of topics by the number of joint_states topics
+            topics_ndx_offset += len(joint_states.keys())
+
+            # PROCESS TWISTS
+            for i in range(len(twists.keys())):
+                ndx = topics_ndx_offset + i
+
+                # Map from twists to where the data should be placed
+                twist_map = twists[topics[ndx]]
+
+                # Get message from data frame
+                twist_msg: geometry_msgs.msg.Twist = data_frame[ndx]
+
+                for vector in ['linear', 'angular']:
+                    if not vector in twist_map.keys():
+                        continue
+                    vector_msg = getattr(twist_msg, vector)
+
+                    for axis in ['x', 'y', 'z']:
+                        if not axis in twist_map[vector].keys():
+                            continue
+                        locator = twist_map[vector][axis]
+                        data_arrays[locator.dtype][t, locator.ndx] = getattr(vector_msg, axis)
+
+            # Offset the number of topics by the number of twists topics
+            topics_ndx_offset += len(twists.keys())
+
 
             # Process timesteps
             data_arrays[DataType.TIMESTEP][t] = data_frame[-1]
@@ -173,6 +246,8 @@ def main(cfg: OmegaConf):
 
         # Add episode to replay buffer
         replay_buffer.add_episode(episode_data_dict, compressors='disk')
+
+    # TODO output order somehow
 
     print(f'Converted {replay_buffer.n_episodes} episodes.')
 
