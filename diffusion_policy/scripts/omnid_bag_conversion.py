@@ -3,6 +3,7 @@ from enum import Enum
 from enum import auto as enum_auto
 import pathlib
 import numpy as np
+import json
 
 import hydra
 from omegaconf import OmegaConf
@@ -247,7 +248,14 @@ def main(cfg: OmegaConf):
         # Add episode to replay buffer
         replay_buffer.add_episode(episode_data_dict, compressors='disk')
 
-    # TODO output order somehow
+    # TODO could be good to output this in a better format
+    out_format = {
+        'actions': actions_names,
+        'low_dim_obs': low_dim_obs_names
+    }
+    with open(str(output_dir.joinpath(output_dir.name + '.format.json').absolute()), 'w') \
+    as out_format_file:
+        json.dump(out_format, out_format_file, indent=4)
 
     print(f'Converted {replay_buffer.n_episodes} episodes.')
 
