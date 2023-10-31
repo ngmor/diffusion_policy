@@ -302,8 +302,12 @@ def main(cfg: OmegaConf):
     # TODO could be good to output this in a better format
     out_format = {
         'actions': actions_names,
-        'low_dim_obs': low_dim_obs_names
+        'low_dim_obs': low_dim_obs_names,
+        'cameras': {}
     }
+    for camera, shape in camera_shapes.items():
+        out_format['cameras'][camera] = list(shape)
+
     with open(str(output_dir.joinpath(output_dir.name + '.format.json').absolute()), 'w') \
     as out_format_file:
         json.dump(out_format, out_format_file, indent=4)
