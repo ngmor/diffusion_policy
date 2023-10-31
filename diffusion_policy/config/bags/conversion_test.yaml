@@ -1,12 +1,32 @@
+defaults:  
+  - _self_  
+  - override hydra/hydra_logging: disabled  
+  - override hydra/job_logging: disabled  
+
 name: conversion_test
 
-output_path: data/conversions/out_test
+input_path: bags/combined
+output_path: bags/converted/${name}
+rate: 10 # Hz
+
+joint_states:
+  - topic: /omnid1/joint/joint_states
+    joints:
+      - name: before_1
+        position: low_dim
+        velocity: low_dim
+        effort: low_dim
+      - name: before_2
+        position: low_dim
+        velocity: low_dim
+        effort: low_dim
+      - name: before_3
+        position: low_dim
+        velocity: low_dim
+        effort: low_dim
+
 
 hydra:
-  job:
-    override_dirname: ${name}
+  output_subdir: null
   run:
-    dir: data/outputs/${now:%Y.%m.%d}/${now:%H.%M.%S}_${name}
-  sweep:
-    dir: data/outputs/${now:%Y.%m.%d}/${now:%H.%M.%S}_${name}
-    subdir: ${hydra.job.num}
+    dir: .
