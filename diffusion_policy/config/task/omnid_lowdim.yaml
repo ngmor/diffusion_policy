@@ -4,7 +4,7 @@ dataset_path: ../../bags/converted/conversion_test
 
 # Shapes must match the "bags" conversion config file
 obs_dim: 30
-action_dim: 2
+action_dim: 3
 keypoint_dim: 0
 
 env_runner:
