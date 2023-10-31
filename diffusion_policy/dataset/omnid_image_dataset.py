@@ -139,7 +139,7 @@ class OmnidImageDataset(BaseImageDataset):
         T_slice = slice(self.n_obs_steps)
 
         obs_dict = dict()
-        for key in self.rbg_keys:
+        for key in self.rgb_keys:
             # Move channel last to channel first
             # T,H,W,C -> T,C,H,W
             # convert uint8 image to float32
