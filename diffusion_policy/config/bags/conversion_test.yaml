@@ -8,7 +8,7 @@ name: conversion_test
 input_path: bags/combined
 output_path: bags/converted/${name}
 rate: 10.0 # Hz
-image_shape: [240, 320, 3] # H, W, C
+image_shape: [240, 320, 3] # HWC
 
 joint_states:
   - topic: /omnid1/joint/joint_states
