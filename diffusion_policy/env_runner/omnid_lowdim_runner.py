@@ -6,4 +6,6 @@ class OmnidLowdimRunner(BaseLowdimRunner):
         super().__init__(output_dir)
 
     def run(self, policy: BaseLowdimPolicy):
-        return dict()
+        log = dict()
+        log['test_mean_score'] = 0.0
+        return log
