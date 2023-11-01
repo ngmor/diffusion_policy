@@ -42,20 +42,29 @@ class DataLocator:
         return self._ndx
 
 def place_scalar_attribute(obj: Any, attr: str, namespace: str, locator_dict: dict, low_dim_obs_list: list, actions_list: list):
+    # Check if the object has this attribute
     if hasattr(obj, attr):
         full_name = namespace + '.' + attr
 
-        if getattr(obj, attr) == 'low_dim':
-            dtype = DataType.LOW_DIM_OBS
-            out_list = low_dim_obs_list
-        elif getattr(obj, attr) == 'action':
-            dtype = DataType.ACTION
-            out_list = actions_list
-        else:
-            raise Exception(f'Unexpected value for data type: {full_name}. Should be \'low_dim\' or \'action\'')
+        # In the locator dict, create a list of locations where this attribute's data is to be stored
+        locator_dict[attr] = []
+
+        # Locations are based on the specified data type from the config
+        for dtype_str in getattr(obj, attr):
+            if dtype_str == 'low_dim':
+                dtype = DataType.LOW_DIM_OBS
+                out_list = low_dim_obs_list
+            elif dtype_str == 'action':
+                dtype = DataType.ACTION
+                out_list = actions_list
+            else:
+                raise Exception(f'Unexpected value for data type: {full_name}. Should be \'low_dim\' or \'action\'')
         
-        locator_dict[attr] = DataLocator(dtype, len(out_list))
-        out_list.append(full_name)
+            # In the locator dict, store information about the data type (which tells what list this
+            # should go into) as well as the index of this information in the list
+            locator_dict[attr].append(DataLocator(dtype, len(out_list)))
+            # Keep a record of what each in the output list is
+            out_list.append(full_name)
 
 # TODO make this recursive?
 def place_sub_attributes(obj: Any, attr: str, sub_attrs: list, namespace: str, locator_dict: dict, low_dim_obs_list: list, actions_list: list):
@@ -126,6 +135,8 @@ def main(cfg: OmegaConf):
                     low_dim_obs_list=low_dim_obs_names,
                     actions_list=actions_names
                 )
+
+                
 
     # Determine where to place twist data according to configuration
     twists = {}
@@ -213,20 +224,20 @@ def main(cfg: OmegaConf):
                     if not joint in joint_state_map.keys():
                         continue
 
-                    # For each attribute, a locator should be in the joint_state_map[joint]
+                    # For each attribute, a locator array should be in the joint_state_map[joint]
                     # dictionary.
                     # locator.dtype gives the data type (action, low_dim_obs, etc) which
                     # determines which data_array the data will go into
                     # locator.ndx gives the index in that data_array this value should go
                     if 'position' in joint_state_map[joint].keys():
-                        locator = joint_state_map[joint]['position']
-                        data_arrays[locator.dtype][t, locator.ndx] = joint_state_msg.position[j]
+                        for locator in joint_state_map[joint]['position']:
+                            data_arrays[locator.dtype][t, locator.ndx] = joint_state_msg.position[j]
                     if 'velocity' in joint_state_map[joint].keys():
-                        locator = joint_state_map[joint]['velocity']
-                        data_arrays[locator.dtype][t, locator.ndx] = joint_state_msg.velocity[j]
+                        for locator in joint_state_map[joint]['velocity']:
+                            data_arrays[locator.dtype][t, locator.ndx] = joint_state_msg.velocity[j]
                     if 'effort' in joint_state_map[joint].keys():
-                        locator = joint_state_map[joint]['effort']
-                        data_arrays[locator.dtype][t, locator.ndx] = joint_state_msg.effort[j]
+                        for locator in joint_state_map[joint]['effort']:
+                            data_arrays[locator.dtype][t, locator.ndx] = joint_state_msg.effort[j]
             
             # Offset the number of topics by the number of joint_states topics
             topics_ndx_offset += len(joint_states.keys())
@@ -249,8 +260,8 @@ def main(cfg: OmegaConf):
                     for axis in ['x', 'y', 'z']:
                         if not axis in twist_map[vector].keys():
                             continue
-                        locator = twist_map[vector][axis]
-                        data_arrays[locator.dtype][t, locator.ndx] = getattr(vector_msg, axis)
+                        for locator in twist_map[vector][axis]:
+                            data_arrays[locator.dtype][t, locator.ndx] = getattr(vector_msg, axis)
 
             # Offset the number of topics by the number of twists topics
             topics_ndx_offset += len(twists.keys())

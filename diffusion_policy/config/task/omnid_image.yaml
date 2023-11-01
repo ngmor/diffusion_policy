@@ -17,7 +17,7 @@ shape_meta: &shape_meta
       shape: *image_shape
       type: rgb
     low_dim_obs:
-      shape: [30]
+      shape: [33]
       type: low_dim
   action:
     shape: [3]

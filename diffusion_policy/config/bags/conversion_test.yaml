@@ -14,55 +14,91 @@ joint_states:
   - topic: /omnid1/joint/joint_states
     joints:
       - name: before_1
-        position: low_dim
-        velocity: low_dim
-        effort: low_dim
+        position:
+          - low_dim
+        velocity:
+          - low_dim
+        effort:
+          - low_dim
       - name: after_1
-        position: low_dim
-        velocity: low_dim
-        effort: low_dim
+        position:
+          - low_dim
+        velocity:
+          - low_dim
+        effort:
+          - low_dim
       - name: before_2
-        position: low_dim
-        velocity: low_dim
-        effort: low_dim
+        position:
+          - low_dim
+        velocity:
+          - low_dim
+        effort:
+          - low_dim
       - name: after_2
-        position: low_dim
-        velocity: low_dim
-        effort: low_dim
+        position:
+          - low_dim
+        velocity:
+          - low_dim
+        effort:
+          - low_dim
       - name: before_3
-        position: low_dim
-        velocity: low_dim
-        effort: low_dim
+        position:
+          - low_dim
+        velocity:
+          - low_dim
+        effort:
+          - low_dim
       - name: after_3
-        position: low_dim
-        velocity: low_dim
-        effort: low_dim
+        position:
+          - low_dim
+        velocity:
+          - low_dim
+        effort:
+          - low_dim
       - name: x
-        position: low_dim
-        velocity: low_dim
-        effort: action
+        position:
+          - low_dim
+        velocity:
+          - low_dim
+        effort:
+          - action
+          - low_dim
       - name: y
-        position: low_dim
-        velocity: low_dim
-        effort: action
+        position:
+          - low_dim
+        velocity:
+          - low_dim
+        effort:
+          - action
+          - low_dim
       - name: z
-        position: low_dim
-        velocity: low_dim
-        effort: action
+        position:
+          - low_dim
+        velocity:
+          - low_dim
+        effort:
+          - action
+          - low_dim
       - name: gimbal_x
-        position: low_dim
+        position:
+          - low_dim
       - name: gimbal_y
-        position: low_dim
+        position:
+          - low_dim
       - name: gimbal_z
-        position: low_dim
+        position:
+          - low_dim
 
 twists:
   - topic: /omnid1/cmd_vel
     linear:
-      x: low_dim
-      y: low_dim
+      x:
+        - low_dim
+      y:
+        - low_dim
     angular:
-      z: low_dim
+      z:
+        - low_dim
 
 images:
   - topic: /overhead_camera/color/image_raw/compressed
