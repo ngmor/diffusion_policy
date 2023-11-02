@@ -13,6 +13,11 @@ ament_python_install_package(diffusion_policy
   PACKAGE_DIR diffusion_policy
 )
 
+install(PROGRAMS
+  nodes/action_predictor.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights
