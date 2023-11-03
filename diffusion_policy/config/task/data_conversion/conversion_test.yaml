@@ -1,7 +1,7 @@
 name: conversion_test
 
 input_path: ../../bags/combined
-output_path: ../../bags/converted/${task.bag_conversion.name}
+output_path: ../../bags/converted/${task.data_conversion.name}
 rate: 10.0 # Hz
 image_shape: [3, 240, 320] # CHW, although images will be stored as HWC
 
@@ -97,8 +97,8 @@ twists:
 
 images:
   - topic: /overhead_camera/color/image_raw/compressed
-    shape: ${task.bag_conversion.image_shape}
+    shape: ${task.data_conversion.image_shape}
   - topic: /horizontal_camera/color/image_raw/compressed
-    shape: ${task.bag_conversion.image_shape}
+    shape: ${task.data_conversion.image_shape}
   - topic: /onboard_camera/color/image_raw/compressed
-    shape: ${task.bag_conversion.image_shape}
+    shape: ${task.data_conversion.image_shape}

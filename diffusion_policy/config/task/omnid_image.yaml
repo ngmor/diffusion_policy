@@ -1,13 +1,13 @@
 defaults:
   - _self_
-  - bag_conversion: conversion_test
+  - data_conversion: conversion_test
 
 name: omnid_image
 
 dataset_path: ../../bags/converted/conversion_test
 
-# Shapes must match the "bags" conversion config file
-image_shape: &image_shape ${task.bag_conversion.image_shape}
+# Shapes must match the data conversion config file
+image_shape: &image_shape ${task.data_conversion.image_shape}
 shape_meta: &shape_meta
   # acceptable types: rgb, low_dim
   obs:

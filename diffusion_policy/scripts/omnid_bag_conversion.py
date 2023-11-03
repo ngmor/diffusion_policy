@@ -85,9 +85,9 @@ def main(config):
         config_name='train_diffusion_unet_real_image_workspace', # Doesn't matter which this is
         overrides=[
             'task=omnid_image',
-            f'task/bag_conversion={config}',
+            f'task/data_conversion={config}',
         ]
-    ).task.bag_conversion
+    ).task.data_conversion
 
     # Init replay buffer for handling output
     output_dir = pathlib.Path(cfg.output_path)
