@@ -59,6 +59,10 @@ def main(config):
         #         cv2.waitKey(1)
         #         time.sleep(1.0/cfg.rate)
 
+        for t in range(len(episode_data)):
+            print(converted_data['action'][t])
+            print(converted_data['low_dim_obs'][t])
+
         # Add episode to replay buffer
         replay_buffer.add_episode(converted_data, compressors='disk')
 

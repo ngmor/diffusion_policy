@@ -210,20 +210,20 @@ class ROSDataConverter:
                     if not joint in joint_state_map.keys():
                         continue
 
-                # For each attribute, a locator array should be in the
-                # joint_state_map[joint] dictionary.
-                # locator.dtype: the data type (action, low_dim_obs, etc).
-                # which determines which data_array the data will go to
-                # locator.ndx gives the index in that data_array this value should go
-                if 'position' in joint_state_map[joint].keys():
-                    for locator in joint_state_map[joint]['position']:
-                        data_arrays[locator.dtype][t, locator.ndx] = joint_state_msg.position[j]
-                if 'velocity' in joint_state_map[joint].keys():
-                    for locator in joint_state_map[joint]['velocity']:
-                        data_arrays[locator.dtype][t, locator.ndx] = joint_state_msg.velocity[j]
-                if 'effort' in joint_state_map[joint].keys():
-                    for locator in joint_state_map[joint]['effort']:
-                        data_arrays[locator.dtype][t, locator.ndx] = joint_state_msg.effort[j]
+                    # For each attribute, a locator array should be in the
+                    # joint_state_map[joint] dictionary.
+                    # locator.dtype: the data type (action, low_dim_obs, etc).
+                    # which determines which data_array the data will go to
+                    # locator.ndx gives the index in that data_array this value should go
+                    if 'position' in joint_state_map[joint].keys():
+                        for locator in joint_state_map[joint]['position']:
+                            data_arrays[locator.dtype][t, locator.ndx] = joint_state_msg.position[j]
+                    if 'velocity' in joint_state_map[joint].keys():
+                        for locator in joint_state_map[joint]['velocity']:
+                            data_arrays[locator.dtype][t, locator.ndx] = joint_state_msg.velocity[j]
+                    if 'effort' in joint_state_map[joint].keys():
+                        for locator in joint_state_map[joint]['effort']:
+                            data_arrays[locator.dtype][t, locator.ndx] = joint_state_msg.effort[j]
 
             # Offset the number of topics by the number of joint_states topics
             topics_ndx_offset += len(self.joint_states.keys())
