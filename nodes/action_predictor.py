@@ -3,6 +3,7 @@
 import torch
 import dill
 import hydra
+import numpy as np
 
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
 from diffusion_policy.policy.base_image_policy import BaseImagePolicy
@@ -11,6 +12,19 @@ from diffusion_policy.common.ros_util import ROSDataConverter
 import rclpy
 from rclpy.node import Node
 import message_filters
+
+CREATE_SUBSCRIPTION = """
+def ${callback_name}(self, msg):
+    self.received[${ndx}] = True
+    self.last_message[${ndx}] = msg
+setattr(ActionPredictor, '${callback_name}', ${callback_name})
+self.create_subscription(
+    msg_type=topic_info[topic]['type'],
+    topic=topic,
+    callback=self.${callback_name},
+    qos_profile=10
+)
+"""
 
 class ActionPredictor(Node):
     def __init__(self):
@@ -63,26 +77,58 @@ class ActionPredictor(Node):
 
         topics, topic_info = self.data_converter.get_topics_and_info()
 
-        input_data_subscribers = []
+        self.input_data_subscribers = []
+        self.last_message = []
 
         for topic in topics:
-            input_data_subscribers.append(message_filters.Subscriber(
-                self,
-                topic_info[topic]['type'],
-                topic
-            ))
-        self.ats = message_filters.ApproximateTimeSynchronizer(
-            input_data_subscribers,
-            self.cfg.n_obs_steps,
-            self.observation_period,
-            allow_headerless=True
-        )
-        self.ats.registerCallback(self.synchronized_observation_callback)
+            self.last_message.append(None)
+            callback_name = topic.replace('/', '_') + '__callback'
+            # TODO can't figure out a better way of doing this
+            create_subscription = CREATE_SUBSCRIPTION.replace('${callback_name}', callback_name).replace('${ndx}', str(topic_info[topic]['ndx']))
+            exec(create_subscription)
+
+        self.received = np.full((len(self.last_message),), False)
+        self.timer_input_data = self.create_timer(self.observation_period, self.timer_observation_callback)
+        self.at_least_one_received = False
+
+        # input_data_subscribers = []
+
+        # for topic in topics:
+        #     input_data_subscribers.append(message_filters.Subscriber(
+        #         self,
+        #         topic_info[topic]['type'],
+        #         topic
+        #     ))
+        # self.ats = message_filters.ApproximateTimeSynchronizer(
+        #     input_data_subscribers,
+        #     self.cfg.n_obs_steps,
+        #     self.observation_period,
+        #     allow_headerless=True
+        # )
+        # self.ats.registerCallback(self.synchronized_observation_callback)
 
         self.last_obs_callback_time = self.get_clock().now()
         self.input_data_queue = []
         self.get_logger().info(f'Synchronizing at {self.observation_rate} Hz')
 
+    def timer_observation_callback(self):
+        receive_time = self.get_clock().now()
+        if np.any(~self.received):
+            if not self.at_least_one_received:
+                return
+            for i in range(len(self.received)):
+                if not self.received[i]:
+                    self.get_logger().warn(f'{self.data_converter.get_topics()[i]} not received in the last observation period, using previous value')
+        self.at_least_one_received = True
+        self.received = np.full((len(self.last_message),), False)
+
+        if len(self.input_data_queue) >= self.cfg.n_obs_steps:
+            self.input_data_queue = self.input_data_queue[1:] + [self.last_message]
+        else:
+            self.input_data_queue.append(self.last_message)
+
+        print(1.0e9 / (receive_time - self.last_obs_callback_time).nanoseconds, len(self.input_data_queue))
+        self.last_obs_callback_time = receive_time
 
     def synchronized_observation_callback(self, *msgs):
         receive_time = self.get_clock().now()
