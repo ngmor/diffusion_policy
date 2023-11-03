@@ -13,25 +13,33 @@ import rclpy
 from rclpy.node import Node
 import message_filters
 
-CREATE_SUBSCRIPTION = """
-def ${callback_name}(self, msg):
-    self.received[${ndx}] = True
-    self.last_message[${ndx}] = msg
-setattr(ActionPredictor, '${callback_name}', ${callback_name})
-self.create_subscription(
-    msg_type=topic_info[topic]['type'],
-    topic=topic,
-    callback=self.${callback_name},
-    qos_profile=10
-)
-"""
+class LastMessageSubscriber:
+    def __init__(
+        self,
+        action_predictor_node: Node, # actually ActionPredictor
+        topic,
+        topic_type,
+        topic_ndx,
+    ):
+        self.action_predictor_node = action_predictor_node
+        self.action_predictor_node.create_subscription(
+            msg_type=topic_type,
+            topic=topic,
+            callback=self.callback,
+            qos_profile=10
+        )
+        self.ndx = topic_ndx
+    def callback(self, msg):
+        self.action_predictor_node.received[self.ndx] = True
+        self.action_predictor_node.last_message[self.ndx] = msg
+
 
 class ActionPredictor(Node):
     def __init__(self):
         super().__init__('action_predictor')
         # PARAMETERS
         self.declare_parameter('checkpoint_path', 'src/diffusion_policy/data/outputs/2023.11.03/01.22.15_train_diffusion_unet_image_omnid_image/checkpoints/epoch=0000-train_loss=1.343.ckpt')
-        # self.declare_parameter('checkpoint_path', 'src/diffusion_policy/data/outputs/2023.11.03/01.22.46_train_diffusion_unet_lowdim_omnid_lowdim/checkpoints/latest.ckpt')
+        # self.declare_parameter('checkpoint_path', 'src/diffusion_policy/data/outputs/2023.11.03/01.22.46_train_diffusion_unet_lowdim_omnid_lowdim/checkpoints/epoch=0000-test_mean_score=0.000.ckpt')
         checkpoint_path = self.get_parameter('checkpoint_path').get_parameter_value().string_value
 
         # TODO method of disabling specific cameras
@@ -39,7 +47,7 @@ class ActionPredictor(Node):
         # # Load payload/workspace
         self.payload = torch.load(open(checkpoint_path, 'rb'), pickle_module=dill)
         self.cfg = self.payload['cfg']
-        self.low_dim = 'lowdim' in self.cfg.task
+        self.low_dim = 'lowdim' in self.cfg.task.name
         self.observation_rate = self.cfg.task.data_conversion.rate
         self.observation_period = 1.0 / self.observation_rate
 
@@ -82,10 +90,9 @@ class ActionPredictor(Node):
 
         for topic in topics:
             self.last_message.append(None)
-            callback_name = topic.replace('/', '_') + '__callback'
-            # TODO can't figure out a better way of doing this
-            create_subscription = CREATE_SUBSCRIPTION.replace('${callback_name}', callback_name).replace('${ndx}', str(topic_info[topic]['ndx']))
-            exec(create_subscription)
+            self.input_data_subscribers.append(
+                LastMessageSubscriber(self, topic, topic_info[topic]['type'], topic_info[topic]['ndx'])
+            )
 
         self.received = np.full((len(self.last_message),), False)
         self.timer_input_data = self.create_timer(self.observation_period, self.timer_observation_callback)
