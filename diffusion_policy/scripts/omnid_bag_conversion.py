@@ -176,7 +176,9 @@ def main(config):
             split_name = topic.topic.split('/')
             camera_name = split_name[1] if split_name[0] == '' else split_name[0]
             camera_names.append(camera_name)
-            camera_shapes[camera_name] = topic.shape
+            # Camera shapes are specified as CHW (for use in training)
+            # but the data is stored as HWC, hence the reformat here
+            camera_shapes[camera_name] = [topic.shape[1], topic.shape[2], topic.shape[0]]
 
     bridge = CvBridge()
 
