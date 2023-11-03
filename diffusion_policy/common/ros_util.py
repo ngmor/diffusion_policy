@@ -30,13 +30,14 @@ class DataLocator:
         return self._ndx
 
 class ROSDataConverter:
-    def __init__(self, cfg):
+    def __init__(self, cfg, disable_cameras=False):
         self.cfg = cfg
         # TODO - how to handle not having input actions(?)
 
         # Determine what topics will go where in output data
         # based on config
         self.topics = []
+        self.topic_types = {}
         self.actions_names = []
         self.low_dim_obs_names = []
         self.camera_names = []
@@ -46,6 +47,7 @@ class ROSDataConverter:
         if hasattr(cfg, 'joint_states'):
             for topic in cfg.joint_states:
                 self.topics.append(topic.topic)
+                self.topic_types[topic.topic] = sensor_msgs.msg.JointState
 
                 self.joint_states[topic.topic] = {}
 
@@ -77,6 +79,7 @@ class ROSDataConverter:
         if hasattr(cfg, 'twists'):
             for topic in cfg.twists:
                 self.topics.append(topic.topic)
+                self.topic_types[topic.topic] = geometry_msgs.msg.Twist
 
                 self.twists[topic.topic] = {}
 
@@ -97,9 +100,10 @@ class ROSDataConverter:
 
         # Find image topics in configuration
         self.camera_shapes = {}
-        if hasattr(cfg, 'images'):
+        if hasattr(cfg, 'images') and not disable_cameras:
             for topic in cfg.images:
                 self.topics.append(topic.topic)
+                self.topic_types[topic.topic] = sensor_msgs.msg.CompressedImage
                 split_name = topic.topic.split('/')
                 camera_name = split_name[1] if split_name[0] == '' else split_name[0]
                 self.camera_names.append(camera_name)
@@ -288,6 +292,9 @@ class ROSDataConverter:
 
     def get_topics(self):
         return self.topics
+    
+    def get_topics_and_types(self):
+        return (self.topics, self.topic_types)
 
     def get_camera_names(self):
         return self.camera_names
