@@ -47,18 +47,30 @@ class ROSDataConverter:
             for topic in cfg.joint_states:
                 self.topics.append(topic.topic)
 
-                temp_dict = {}
+                self.joint_states[topic.topic] = {}
 
                 for joint in topic.joints:
-                    temp_dict[joint.name] = {}
+                    self.joint_states[topic.topic][joint.name] = {}
 
                     namespace = topic.topic + '.' + joint.name
 
-                    self._place_scalar_attribute(joint, 'position', namespace, temp_dict)
-                    self._place_scalar_attribute(joint, 'velocity', namespace, temp_dict)
-                    self._place_scalar_attribute(joint, 'effort', namespace, temp_dict)
-
-                self.joint_states[topic.topic] = temp_dict
+                    self._place_scalar_attribute(
+                        joint,
+                        'position',
+                        namespace, self.joint_states[topic.topic][joint.name]
+                    )
+                    self._place_scalar_attribute(
+                        joint,
+                        'velocity',
+                        namespace,
+                        self.joint_states[topic.topic][joint.name]
+                    )
+                    self._place_scalar_attribute(
+                        joint,
+                        'effort',
+                        namespace,
+                        self.joint_states[topic.topic][joint.name]
+                    )
 
         # Determine where to place twist data according to configuration
         self.twists = {}
@@ -66,12 +78,22 @@ class ROSDataConverter:
             for topic in cfg.twists:
                 self.topics.append(topic.topic)
 
-                temp_dict = {}
+                self.twists[topic.topic] = {}
 
-                self._place_sub_attributes(topic, 'linear', ['x', 'y', 'z'], topic.topic, temp_dict)
-                self._place_sub_attributes(topic, 'angular', ['x', 'y', 'z'], topic.topic, temp_dict)
-
-                self.twists[topic.topic] = temp_dict
+                self._place_sub_attributes(
+                    topic,
+                    'linear',
+                    ['x', 'y', 'z'],
+                    topic.topic,
+                    self.twists[topic.topic]
+                )
+                self._place_sub_attributes(
+                    topic,
+                    'angular',
+                    ['x', 'y', 'z'],
+                    topic.topic,
+                    self.twists[topic.topic]
+                )
 
         # Find image topics in configuration
         self.camera_shapes = {}
