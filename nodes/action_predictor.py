@@ -72,8 +72,10 @@ class ActionPredictor(Node):
         )
         self.ats.registerCallback(self.synchronized_observation_callback)
 
-        # TODO remove
-        self.cb_time = self.get_clock().now()
+        # TODO rename and formalize
+        self.last_obs_callback_time = self.get_clock().now()
+
+        self.input_data_queue = []
 
         # TODO uncomment
         # # Load payload/workspace
@@ -105,11 +107,20 @@ class ActionPredictor(Node):
 
         # self.get_logger().info('Successfully loaded model.')
 
-    def synchronized_observation_callback(self, *args):
+    def synchronized_observation_callback(self, *msgs):
         receive_time = self.get_clock().now()
-        diff = receive_time - self.cb_time
-        print(1.0e9/diff.nanoseconds, len(args))
-        self.cb_time = receive_time
+        if (receive_time - self.last_obs_callback_time).nanoseconds / 1.0e9 \
+        < self.observation_rate_period:
+            return
+
+        # queue size - TODO make correspond to model num observations
+        if len(self.input_data_queue) >= 10:
+            self.input_data_queue = self.input_data_queue[1:] + [msgs]
+        else:
+            self.input_data_queue.append(msgs)
+
+        print(1.0e9 / (receive_time - self.last_obs_callback_time).nanoseconds, len(self.input_data_queue))
+        self.last_obs_callback_time = receive_time
 
 def main(args=None):
     rclpy.init(args=args)
