@@ -1,12 +1,7 @@
-defaults:  
-  - _self_  
-  - override hydra/hydra_logging: disabled  
-  - override hydra/job_logging: disabled  
-
 name: conversion_test
 
-input_path: bags/combined
-output_path: bags/converted/${name}
+input_path: ../../bags/combined
+output_path: ../../bags/converted/${task.bag_conversion.name}
 rate: 10.0 # Hz
 image_shape: [240, 320, 3] # HWC
 
@@ -102,13 +97,8 @@ twists:
 
 images:
   - topic: /overhead_camera/color/image_raw/compressed
-    shape: ${image_shape}
+    shape: ${task.bag_conversion.image_shape}
   - topic: /horizontal_camera/color/image_raw/compressed
-    shape: ${image_shape}
+    shape: ${task.bag_conversion.image_shape}
   - topic: /onboard_camera/color/image_raw/compressed
-    shape: ${image_shape}
-
-hydra:
-  output_subdir: null
-  run:
-    dir: .
+    shape: ${task.bag_conversion.image_shape}

@@ -4,7 +4,7 @@ from enum import auto as enum_auto
 import pathlib
 import numpy as np
 import json
-
+import click
 import hydra
 from omegaconf import OmegaConf
 
@@ -19,8 +19,6 @@ from omnid_bag import decimate
 
 # allows arbitrary python code execution in configs using the ${eval:''} resolver
 OmegaConf.register_new_resolver("eval", eval, replace=True)
-
-PACKAGE_PATH = pathlib.Path(__file__).parent.parent.parent
 
 class DataType(Enum):
     TIMESTEP = enum_auto()
@@ -79,12 +77,17 @@ def place_sub_attributes(obj: Any, attr: str, sub_attrs: list, namespace: str, l
         if len(temp_dict.keys()) > 0:
             locator_dict[attr] = temp_dict
 
-@hydra.main(
-    version_base=None,
-    config_path=str(PACKAGE_PATH.joinpath('diffusion_policy', 'config', 'bags'))
-)
-def main(cfg: OmegaConf):
-    OmegaConf.resolve(cfg)
+@click.command()
+@click.option('-c', '--config', required=True)
+def main(config):
+    hydra.initialize(config_path='../config', job_name='convert_bag', version_base=None)
+    cfg = hydra.compose(
+        config_name='train_diffusion_unet_real_image_workspace', # Doesn't matter which this is
+        overrides=[
+            'task=omnid_image',
+            f'task/bag_conversion={config}',
+        ]
+    ).task.bag_conversion
 
     # Init replay buffer for handling output
     output_dir = pathlib.Path(cfg.output_path)

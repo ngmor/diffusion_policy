@@ -1,3 +1,7 @@
+defaults:
+  - _self_
+  - bag_conversion: conversion_test
+
 name: omnid_image
 
 dataset_path: ../../bags/converted/conversion_test
