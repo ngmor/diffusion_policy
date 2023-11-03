@@ -37,7 +37,7 @@ class ROSDataConverter:
         # Determine what topics will go where in output data
         # based on config
         self.topics = []
-        self.topic_types = {}
+        self.topic_info = {}
         self.actions_names = []
         self.low_dim_obs_names = []
         self.camera_names = []
@@ -46,8 +46,7 @@ class ROSDataConverter:
         self.joint_states = {}
         if hasattr(cfg, 'joint_states'):
             for topic in cfg.joint_states:
-                self.topics.append(topic.topic)
-                self.topic_types[topic.topic] = sensor_msgs.msg.JointState
+                self._add_topic(topic.topic, sensor_msgs.msg.JointState)
 
                 self.joint_states[topic.topic] = {}
 
@@ -78,8 +77,7 @@ class ROSDataConverter:
         self.twists = {}
         if hasattr(cfg, 'twists'):
             for topic in cfg.twists:
-                self.topics.append(topic.topic)
-                self.topic_types[topic.topic] = geometry_msgs.msg.Twist
+                self._add_topic(topic.topic, geometry_msgs.msg.Twist)
 
                 self.twists[topic.topic] = {}
 
@@ -102,8 +100,7 @@ class ROSDataConverter:
         self.camera_shapes = {}
         if hasattr(cfg, 'images') and not disable_cameras:
             for topic in cfg.images:
-                self.topics.append(topic.topic)
-                self.topic_types[topic.topic] = sensor_msgs.msg.CompressedImage
+                self._add_topic(topic.topic, sensor_msgs.msg.CompressedImage)
                 split_name = topic.topic.split('/')
                 camera_name = split_name[1] if split_name[0] == '' else split_name[0]
                 self.camera_names.append(camera_name)
@@ -113,6 +110,12 @@ class ROSDataConverter:
 
         self.bridge = CvBridge()
 
+    def _add_topic(self, topic, msg_type):
+        self.topic_info[topic] = {
+            'ndx': len(self.topics),
+            'type': msg_type
+        }
+        self.topics.append(topic)
 
     def _place_scalar_attribute(
         self,
@@ -293,8 +296,11 @@ class ROSDataConverter:
     def get_topics(self):
         return self.topics
     
-    def get_topics_and_types(self):
-        return (self.topics, self.topic_types)
+    def get_topic_info(self):
+        return self.topic_info
+
+    def get_topics_and_info(self):
+        return (self.get_topics(), self.get_topic_info())
 
     def get_camera_names(self):
         return self.camera_names

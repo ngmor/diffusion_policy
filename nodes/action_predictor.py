@@ -61,14 +61,14 @@ class ActionPredictor(Node):
             disable_cameras=self.low_dim
         )
 
-        topics, topic_types = self.data_converter.get_topics_and_types()
+        topics, topic_info = self.data_converter.get_topics_and_info()
 
         input_data_subscribers = []
 
         for topic in topics:
             input_data_subscribers.append(message_filters.Subscriber(
                 self,
-                topic_types[topic],
+                topic_info[topic]['type'],
                 topic
             ))
         self.ats = message_filters.ApproximateTimeSynchronizer(
