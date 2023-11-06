@@ -4,6 +4,7 @@ import torch
 import dill
 import hydra
 import numpy as np
+import threading
 
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
 from diffusion_policy.policy.base_image_policy import BaseImagePolicy
@@ -31,7 +32,7 @@ class LastMessageSubscriber:
         )
         self.ndx = topic_ndx
     def callback(self, msg):
-        self.action_predictor_node.received[self.ndx] = True
+        self.action_predictor_node.obs_received[self.ndx] = True
         self.action_predictor_node.last_message[self.ndx] = msg
 
 
@@ -45,6 +46,9 @@ class ActionPredictor(Node):
 
         self.declare_parameter('num_inference_diffusion_timesteps', 16)
         self.num_inference_diffusion_timesteps = self.get_parameter('num_inference_diffusion_timesteps').get_parameter_value().integer_value
+
+        self.declare_parameter('num_actions_taken', 8)
+        self.num_actions_taken = self.get_parameter('num_actions_taken').get_parameter_value().integer_value
 
         # TODO method of disabling specific cameras
 
@@ -77,9 +81,16 @@ class ActionPredictor(Node):
             self.num_inference_diffusion_timesteps = self.policy.num_inference_steps
             self.set_parameters([Parameter(name='num_inference_diffusion_timesteps', value=self.num_inference_diffusion_timesteps)])
 
-        print(self.policy.n_action_steps)
+        # TODO make a parameter for the number of steps that are actually taken
         self.policy.n_action_steps = self.policy.horizon - self.policy.n_obs_steps + 1
-        print(self.policy.n_action_steps)
+
+        if self.num_actions_taken > self.policy.n_action_steps:
+            self.get_logger().warn(
+                'Num actions taken is larger than horizon, clamping to'
+                f' {self.policy.n_action_steps} actions'
+            )
+            self.num_actions_taken = self.policy.n_action_steps
+            self.set_parameters([Parameter(name='num_actions_taken', value=self.num_actions_taken)])
 
         self.get_logger().info('Successfully loaded model.')
 
@@ -100,36 +111,77 @@ class ActionPredictor(Node):
                 LastMessageSubscriber(self, topic, topic_info[topic]['type'], topic_info[topic]['ndx'])
             )
 
-        self.received = np.full((len(self.last_message),), False)
-        self.timer_input_data = self.create_timer(self.observation_period, self.timer_observation_callback)
-        self.at_least_one_received = False
+        self.timer = self.create_timer(self.observation_period, self.timer_callback)
+
+        self.obs_received = np.full((len(self.last_message),), False)
+        self.at_least_one_of_each_obs_received = False
         self.n_obs_received = False
+        self.obs_data_queue = []
+        self.obs_data_mutex = threading.Lock()
 
+        self.inference_counter = self.num_actions_taken
+        self.inference_thread = threading.Thread()
 
-        self.last_obs_callback_time = self.get_clock().now()
-        self.input_data_queue = []
+        self.action_data_mutex = threading.Lock()
+        self.action_counter = 0
+        self.action_list = []
+
         self.get_logger().info(f'Synchronizing at {self.observation_rate} Hz')
 
-    def timer_observation_callback(self):
-        if np.any(~self.received):
-            if not self.at_least_one_received:
+    def timer_callback(self):
+        if np.any(~self.obs_received):
+            if not self.at_least_one_of_each_obs_received:
+                # we haven't received one of each observation yet, no point in continuing
                 return
-            for i in range(len(self.received)):
-                if not self.received[i]:
+            for i in range(len(self.obs_received)):
+                if not self.obs_received[i]:
                     self.get_logger().warn(f'{self.data_converter.get_topics()[i]} not received in the last observation period, using previous value')
-        self.at_least_one_received = True
-        self.received = np.full((len(self.last_message),), False)
-
-        if len(self.input_data_queue) < self.cfg.n_obs_steps:
-            self.input_data_queue.append(self.last_message)
-            return
-        else:
-            if not self.n_obs_received:
-                self.get_logger().info(f'{self.cfg.n_obs_steps} observations received, ready to begin inference.')
-                self.n_obs_received = True
-            self.input_data_queue = self.input_data_queue[1:] + [self.last_message]
+        self.at_least_one_of_each_obs_received = True
+        self.obs_received = np.full((len(self.last_message),), False)
 
 
+        # Lock mutex to modify observation data queue
+        with self.obs_data_mutex:
+            if len(self.obs_data_queue) < self.cfg.n_obs_steps:
+                self.obs_data_queue.append(self.last_message)
+                # If we don't have the number of observations required for an inference,
+                # do not continue
+                return
+            else:
+                if not self.n_obs_received:
+                    self.get_logger().info(
+                        f'{self.cfg.n_obs_steps} observations received, ready to begin inference.'
+                    )
+                    self.n_obs_received = True
+                # Only retain the number of observations required for an inference
+                self.obs_data_queue = self.obs_data_queue[1:] + [self.last_message]
+
+        self.inference_counter += 1
+
+        if not self.inference_thread.is_alive():
+            # If it's time to infer again, start thread
+            if self.inference_counter > self.num_actions_taken:
+                self.inference_counter = 0
+                self.inference_thread = threading.Thread(target=self.infer)
+                self.inference_thread.start()
+        
+        # Perform actions from past inferences
+        with self.action_data_mutex:
+            if self.action_counter < len(self.action_list):
+                # TODO replace with actual action
+                print(f'Performing action: {self.action_list[self.action_counter]}')
+                self.action_counter += 1
+
+
+    def infer(self):
+        self.get_logger().info('Starting inference')
+        # TODO replace with inference
+        with self.action_data_mutex:
+            self.action_list = []
+            for i in range(self.policy.n_action_steps):
+                self.action_list.append(i)
+            self.action_counter = 0
+        self.get_logger().info('Inference complete')
 
         # Use the torch unsqueeze method to add a dimension of 1 at the start
         # Probably this line basically:
