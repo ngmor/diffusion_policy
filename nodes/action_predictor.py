@@ -130,7 +130,7 @@ class ActionPredictor(Node):
 
         self.action_data_mutex = threading.Lock()
         self.action_counter = 0
-        self.action_list = []
+        self.action_array = []
 
         self.get_logger().info(f'Synchronizing at {self.observation_rate} Hz')
 
@@ -177,14 +177,19 @@ class ActionPredictor(Node):
         
         # Perform actions from past inferences
         with self.action_data_mutex:
-            if self.action_counter < len(self.action_list):
+            if self.action_counter < len(self.action_array):
                 # TODO replace with actual action
-                print(f'Performing action: {self.action_list[self.action_counter]}')
+                print(f'Performing action {self.action_counter}: {self.action_array[self.action_counter]}')
                 self.action_counter += 1
 
 
     def infer(self):
         self.get_logger().info('Starting inference')
+        # TODO remove
+        import time
+        start = time.time()
+
+        # Convert observation data from ROS messages to np arrays
         with self.obs_data_mutex:
             obs_data = self.data_converter.convert_data_frames(self.obs_data_queue)
         
@@ -194,45 +199,28 @@ class ActionPredictor(Node):
             del obs_data['timestep']
 
         # Convert to torch Tensors of the right shape
-        obs_data_tensor = dict_apply(
+        obs_data_tensors = dict_apply(
             obs_data,
             lambda x: torch.from_numpy(x).unsqueeze(0).to(self.device)
         )
 
         # TODO remove
-        for key, value in obs_data_tensor.items():
-            print(key, type(value), value.shape)
+        # for key, value in obs_data_tensors.items():
+        #     print(key, type(value), value.shape)
 
-        
-        
+        # Perform inference
+        with torch.no_grad():
+            result = self.policy.predict_action(obs_data_tensors)
 
+        # TODO remove
+        # for key, value in result.items():
+        #     print(key, type(value), value.shape)
 
-        # TODO replace with inference
         with self.action_data_mutex:
-            self.action_list = []
-            for i in range(self.policy.n_action_steps):
-                self.action_list.append(i)
+            self.action_array = result['action'][0].detach().to('cpu').numpy()
             self.action_counter = 0
         self.get_logger().info('Inference complete')
-
-        # Use the torch unsqueeze method to add a dimension of 1 at the start
-        # Probably this line basically:
-        # obs_dict = dict_apply(obs_dict_np, 
-        #     lambda x: torch.from_numpy(x).unsqueeze(0).to(device))
-
-        # Image:
-        # Batch size is 64
-        # obs <class 'dict'>
-        #     overhead_camera <class 'torch.Tensor'> torch.Size([64, 2, 3, 240, 320])
-        #     horizontal_camera <class 'torch.Tensor'> torch.Size([64, 2, 3, 240, 320])
-        #     onboard_camera <class 'torch.Tensor'> torch.Size([64, 2, 3, 240, 320])
-        #     low_dim_obs <class 'torch.Tensor'> torch.Size([64, 2, 33])
-        # action <class 'torch.Tensor'> torch.Size([64, 16, 3])
-
-        # Low Dim:
-        # Batch size is 256 but there might not be enough data (hence 210)
-        # obs <class 'torch.Tensor'> torch.Size([210, 16, 33])
-        # action <class 'torch.Tensor'> torch.Size([210, 16, 3])
+        self.get_logger().info(f'Time: {time.time() - start} sec')
 
 
 
