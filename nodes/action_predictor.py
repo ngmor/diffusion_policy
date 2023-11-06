@@ -9,6 +9,7 @@ import threading
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
 from diffusion_policy.policy.base_image_policy import BaseImagePolicy
 from diffusion_policy.common.ros_util import ROSDataConverter
+from diffusion_policy.common.pytorch_util import dict_apply
 
 import rclpy
 from rclpy.node import Node
@@ -81,7 +82,6 @@ class ActionPredictor(Node):
             self.num_inference_diffusion_timesteps = self.policy.num_inference_steps
             self.set_parameters([Parameter(name='num_inference_diffusion_timesteps', value=self.num_inference_diffusion_timesteps)])
 
-        # TODO make a parameter for the number of steps that are actually taken
         self.policy.n_action_steps = self.policy.horizon - self.policy.n_obs_steps + 1
 
         if self.num_actions_taken > self.policy.n_action_steps:
@@ -95,9 +95,14 @@ class ActionPredictor(Node):
         self.get_logger().info('Successfully loaded model.')
 
         # Init data converter
+        if self.low_dim:
+            cameras_to_exclude = ['*']
+        else:
+            cameras_to_exclude = [] # TODO add parameter for this
         self.data_converter = ROSDataConverter(
             cfg=self.cfg.task.data_conversion,
-            disable_cameras=self.low_dim
+            exclude_cameras=cameras_to_exclude,
+            camera_format='CHW' # for passing into model
         )
 
         topics, topic_info = self.data_converter.get_topics_and_info()
@@ -110,10 +115,11 @@ class ActionPredictor(Node):
             self.input_data_subscribers.append(
                 LastMessageSubscriber(self, topic, topic_info[topic]['type'], topic_info[topic]['ndx'])
             )
+        self.last_message.append(None) # For timestep
 
         self.timer = self.create_timer(self.observation_period, self.timer_callback)
 
-        self.obs_received = np.full((len(self.last_message),), False)
+        self.reset_obs_received()
         self.at_least_one_of_each_obs_received = False
         self.n_obs_received = False
         self.obs_data_queue = []
@@ -128,6 +134,9 @@ class ActionPredictor(Node):
 
         self.get_logger().info(f'Synchronizing at {self.observation_rate} Hz')
 
+    def reset_obs_received(self):
+        self.obs_received = np.full((len(self.last_message) - 1,), False)
+
     def timer_callback(self):
         if np.any(~self.obs_received):
             if not self.at_least_one_of_each_obs_received:
@@ -137,11 +146,12 @@ class ActionPredictor(Node):
                 if not self.obs_received[i]:
                     self.get_logger().warn(f'{self.data_converter.get_topics()[i]} not received in the last observation period, using previous value')
         self.at_least_one_of_each_obs_received = True
-        self.obs_received = np.full((len(self.last_message),), False)
+        self.reset_obs_received()
 
 
         # Lock mutex to modify observation data queue
         with self.obs_data_mutex:
+            self.last_message[-1] = self.get_clock().now().nanoseconds
             if len(self.obs_data_queue) < self.cfg.n_obs_steps:
                 self.obs_data_queue.append(self.last_message)
                 # If we don't have the number of observations required for an inference,
@@ -175,6 +185,28 @@ class ActionPredictor(Node):
 
     def infer(self):
         self.get_logger().info('Starting inference')
+        with self.obs_data_mutex:
+            obs_data = self.data_converter.convert_data_frames(self.obs_data_queue)
+        
+        if 'action' in obs_data.keys():
+            del obs_data['action']
+        if 'timestep' in obs_data.keys():
+            del obs_data['timestep']
+
+        # Convert to torch Tensors of the right shape
+        obs_data_tensor = dict_apply(
+            obs_data,
+            lambda x: torch.from_numpy(x).unsqueeze(0).to(self.device)
+        )
+
+        # TODO remove
+        for key, value in obs_data_tensor.items():
+            print(key, type(value), value.shape)
+
+        
+        
+
+
         # TODO replace with inference
         with self.action_data_mutex:
             self.action_list = []
@@ -190,7 +222,7 @@ class ActionPredictor(Node):
 
         # Image:
         # Batch size is 64
-        # obs <class 'dict'>                                                                                                                                                                                                 
+        # obs <class 'dict'>
         #     overhead_camera <class 'torch.Tensor'> torch.Size([64, 2, 3, 240, 320])
         #     horizontal_camera <class 'torch.Tensor'> torch.Size([64, 2, 3, 240, 320])
         #     onboard_camera <class 'torch.Tensor'> torch.Size([64, 2, 3, 240, 320])
@@ -199,7 +231,7 @@ class ActionPredictor(Node):
 
         # Low Dim:
         # Batch size is 256 but there might not be enough data (hence 210)
-        # obs <class 'torch.Tensor'> torch.Size([210, 16, 33])                                                                                                                                                               
+        # obs <class 'torch.Tensor'> torch.Size([210, 16, 33])
         # action <class 'torch.Tensor'> torch.Size([210, 16, 3])
 
 

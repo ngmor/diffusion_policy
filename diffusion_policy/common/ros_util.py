@@ -29,8 +29,24 @@ class DataLocator:
     def ndx(self) -> int:
         return self._ndx
 
+class CameraShape:
+    def __init__(self, C, H, W):
+        self.C = C
+        self.H = H
+        self.W = W
+    def as_tuple(self, format):
+        out = list()
+        for dim in format:
+            out.append(getattr(self, dim))
+        return tuple(out)
+
 class ROSDataConverter:
-    def __init__(self, cfg, disable_cameras=False):
+    def __init__(self, cfg, exclude_cameras: List[str]=[], camera_format='HWC'):
+        """
+        cfg is bags config from hydra
+        if exclude_cameras contains '*' all cameras will be excluded
+        camera_format determines the shape of the output camera data frames
+        """
         self.cfg = cfg
         # TODO - how to handle not having input actions(?)
 
@@ -41,6 +57,7 @@ class ROSDataConverter:
         self.actions_names = []
         self.low_dim_obs_names = []
         self.camera_names = []
+        self.camera_format = camera_format
 
         # Determine where to place joint state data according to configuration
         self.joint_states = {}
@@ -98,15 +115,17 @@ class ROSDataConverter:
 
         # Find image topics in configuration
         self.camera_shapes = {}
-        if hasattr(cfg, 'images') and not disable_cameras:
+        if hasattr(cfg, 'images') and not '*' in exclude_cameras:
             for topic in cfg.images:
-                self._add_topic(topic.topic, sensor_msgs.msg.CompressedImage)
                 split_name = topic.topic.split('/')
                 camera_name = split_name[1] if split_name[0] == '' else split_name[0]
+                if camera_name in exclude_cameras:
+                    # Exclude specific cameras
+                    continue
+                self._add_topic(topic.topic, sensor_msgs.msg.CompressedImage)
                 self.camera_names.append(camera_name)
-                # Camera shapes are specified as CHW (for use in training)
-                # but the data is stored as HWC, hence the reformat here
-                self.camera_shapes[camera_name] = [topic.shape[1], topic.shape[2], topic.shape[0]]
+                # Topics are stored in the config as CHW
+                self.camera_shapes[camera_name] = CameraShape(*topic.shape)
 
         self.bridge = CvBridge()
 
@@ -194,7 +213,7 @@ class ROSDataConverter:
         camera_data_arrays = {}
         for camera, shape in self.camera_shapes.items():
             camera_data_arrays[camera] = np.zeros(
-                (len(data_frames), *shape),
+                (len(data_frames), *shape.as_tuple(self.camera_format)),
                 dtype=np.uint8
             )
 
@@ -273,7 +292,19 @@ class ROSDataConverter:
                 image = self.bridge.compressed_imgmsg_to_cv2(image_msg)
 
                 # Resize
-                image = cv2.resize(image, (shape[1], shape[0]))
+                image = cv2.resize(image, (shape.W, shape.H))
+
+                if self.camera_format != 'HWC':
+                    # Move axes to fit the requested format
+                    image = np.moveaxis(
+                        image,
+                        [0, 1, 2],
+                        [
+                            self.camera_format.find('H'),
+                            self.camera_format.find('W'),
+                            self.camera_format.find('C')
+                        ]
+                    )
 
                 # Store
                 camera_data_arrays[camera_name][t] = image
@@ -312,6 +343,6 @@ class ROSDataConverter:
             'cameras': {}
         }
         for camera, shape in self.camera_shapes.items():
-            out_format['cameras'][camera] = list(shape)
-        
+            out_format['cameras'][camera] = list(shape.as_tuple(self.camera_format))
+
         return out_format
