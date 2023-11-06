@@ -15,6 +15,7 @@ ament_python_install_package(diffusion_policy
 
 install(PROGRAMS
   nodes/action_predictor.py
+  nodes/thread_test.py # TODO REMOVE
   DESTINATION lib/${PROJECT_NAME}
 )
 

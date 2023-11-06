@@ -77,7 +77,9 @@ class ActionPredictor(Node):
             self.num_inference_diffusion_timesteps = self.policy.num_inference_steps
             self.set_parameters([Parameter(name='num_inference_diffusion_timesteps', value=self.num_inference_diffusion_timesteps)])
 
+        print(self.policy.n_action_steps)
         self.policy.n_action_steps = self.policy.horizon - self.policy.n_obs_steps + 1
+        print(self.policy.n_action_steps)
 
         self.get_logger().info('Successfully loaded model.')
 
@@ -118,13 +120,37 @@ class ActionPredictor(Node):
         self.at_least_one_received = True
         self.received = np.full((len(self.last_message),), False)
 
-        if len(self.input_data_queue) >= self.cfg.n_obs_steps:
-            self.input_data_queue = self.input_data_queue[1:] + [self.last_message]
+        if len(self.input_data_queue) < self.cfg.n_obs_steps:
+            self.input_data_queue.append(self.last_message)
+            return
         else:
             if not self.n_obs_received:
                 self.get_logger().info(f'{self.cfg.n_obs_steps} observations received, ready to begin inference.')
                 self.n_obs_received = True
-            self.input_data_queue.append(self.last_message)
+            self.input_data_queue = self.input_data_queue[1:] + [self.last_message]
+
+
+
+        # Use the torch unsqueeze method to add a dimension of 1 at the start
+        # Probably this line basically:
+        # obs_dict = dict_apply(obs_dict_np, 
+        #     lambda x: torch.from_numpy(x).unsqueeze(0).to(device))
+
+        # Image:
+        # Batch size is 64
+        # obs <class 'dict'>                                                                                                                                                                                                 
+        #     overhead_camera <class 'torch.Tensor'> torch.Size([64, 2, 3, 240, 320])
+        #     horizontal_camera <class 'torch.Tensor'> torch.Size([64, 2, 3, 240, 320])
+        #     onboard_camera <class 'torch.Tensor'> torch.Size([64, 2, 3, 240, 320])
+        #     low_dim_obs <class 'torch.Tensor'> torch.Size([64, 2, 33])
+        # action <class 'torch.Tensor'> torch.Size([64, 16, 3])
+
+        # Low Dim:
+        # Batch size is 256 but there might not be enough data (hence 210)
+        # obs <class 'torch.Tensor'> torch.Size([210, 16, 33])                                                                                                                                                               
+        # action <class 'torch.Tensor'> torch.Size([210, 16, 3])
+
+
 
 def main(args=None):
     rclpy.init(args=args)
