@@ -14,6 +14,7 @@ from diffusion_policy.common.pytorch_util import dict_apply
 import rclpy
 from rclpy.node import Node
 from rclpy.parameter import Parameter
+import geometry_msgs.msg
 import message_filters
 
 class LastMessageSubscriber:
@@ -52,6 +53,9 @@ class ActionPredictor(Node):
         self.num_actions_taken = self.get_parameter('num_actions_taken').get_parameter_value().integer_value
 
         # TODO method of disabling specific cameras
+
+        # PUBLISHERS
+        self.pub_action = self.create_publisher(geometry_msgs.msg.Wrench, '/omnid1/delta/additional_force', 10)
 
         # # Load payload/workspace
         self.payload = torch.load(open(checkpoint_path, 'rb'), pickle_module=dill)
@@ -178,8 +182,10 @@ class ActionPredictor(Node):
         # Perform actions from past inferences
         with self.action_data_mutex:
             if self.action_counter < len(self.action_array):
-                # TODO replace with actual action
                 print(f'Performing action {self.action_counter}: {self.action_array[self.action_counter]}')
+                msg = geometry_msgs.msg.Wrench()
+                msg.force.x = float(self.action_array[self.action_counter][0])
+                msg.force.y = float(self.action_array[self.action_counter][1])
                 self.action_counter += 1
 
 
