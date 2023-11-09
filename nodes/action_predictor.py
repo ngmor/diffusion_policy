@@ -15,6 +15,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 import geometry_msgs.msg
+import std_srvs.srv
 import message_filters
 
 class LastMessageSubscriber:
@@ -56,6 +57,15 @@ class ActionPredictor(Node):
 
         # PUBLISHERS
         self.pub_action = self.create_publisher(geometry_msgs.msg.Wrench, '/omnid1/delta/additional_force', 10)
+
+        # SERVICE SERVERS
+        self.srv_start_inference = self.create_service(std_srvs.srv.Empty, 'start_inference', self.srv_start_inference_callback)
+        self.srv_stop_inference = self.create_service(std_srvs.srv.Empty, 'stop_inference', self.srv_stop_inference_callback)
+        self.srv_start_action = self.create_service(std_srvs.srv.Empty, 'start_action', self.srv_start_action_callback)
+        self.srv_stop_action = self.create_service(std_srvs.srv.Empty, 'stop_action', self.srv_stop_action_callback)
+        self.enable_inference = True
+        self.enable_action = False
+
 
         # # Load payload/workspace
         self.payload = torch.load(open(checkpoint_path, 'rb'), pickle_module=dill)
@@ -141,6 +151,23 @@ class ActionPredictor(Node):
     def reset_obs_received(self):
         self.obs_received = np.full((len(self.last_message) - 1,), False)
 
+    def srv_start_inference_callback(self, request, response):
+        self.enable_inference = True
+        self.inference_counter = self.num_actions_taken  # immediately trigger inference
+
+    def srv_stop_inference_callback(self, request, response):
+        self.enable_inference = False
+        self.srv_stop_action_callback(None, None)
+
+    def srv_start_action_callback(self, request, response):
+        if self.enable_inference:
+            self.enable_action = True
+    
+    def srv_stop_action_callback(self, request, response):
+        self.enable_action = False
+        self.action_array = []
+        self.action_counter = 0
+
     def timer_callback(self):
         if np.any(~self.obs_received):
             if not self.at_least_one_of_each_obs_received:
@@ -170,6 +197,9 @@ class ActionPredictor(Node):
                 # Only retain the number of observations required for an inference
                 self.obs_data_queue = self.obs_data_queue[1:] + [self.last_message]
 
+        if not self.enable_inference:
+            return
+
         self.inference_counter += 1
 
         if not self.inference_thread.is_alive():
@@ -178,7 +208,11 @@ class ActionPredictor(Node):
                 self.inference_counter = 0
                 self.inference_thread = threading.Thread(target=self.infer)
                 self.inference_thread.start()
-        
+
+
+        if not self.enable_action:
+            return
+
         # Perform actions from past inferences
         with self.action_data_mutex:
             if self.action_counter < len(self.action_array):
