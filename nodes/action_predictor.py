@@ -44,7 +44,7 @@ class ActionPredictor(Node):
         super().__init__('action_predictor')
         # PARAMETERS
         # self.declare_parameter('checkpoint_path', 'models/2023.11.06/20.56.59_train_diffusion_unet_image_omnid_image/checkpoints/best.ckpt')
-        self.declare_parameter('checkpoint_path', 'models/2023.11.07/09.17.07_train_diffusion_unet_lowdim_omnid_lowdim/checkpoints/best.ckpt')
+        self.declare_parameter('checkpoint_path', 'models/2023.11.10/11.53.05_train_diffusion_unet_lowdim_omnid_lowdim/checkpoints/best.ckpt')
         checkpoint_path = self.get_parameter('checkpoint_path').get_parameter_value().string_value
 
         self.declare_parameter('num_inference_diffusion_timesteps', 16)
@@ -68,7 +68,9 @@ class ActionPredictor(Node):
         self.payload = torch.load(open(checkpoint_path, 'rb'), pickle_module=dill)
         self.cfg = self.payload['cfg']
         self.low_dim = 'lowdim' in self.cfg.task.name
-        self.observation_rate = self.cfg.task.data_conversion.rate
+        # self.observation_rate = self.cfg.task.data_conversion.rate
+        # TODO revert to above
+        self.observation_rate = 50.0
         self.observation_period = 1.0 / self.observation_rate
 
         workspace_cls = hydra.utils.get_class(self.cfg._target_)
@@ -111,12 +113,15 @@ class ActionPredictor(Node):
         # Init data converter
         if self.low_dim:
             cameras_to_exclude = ['*']
+            low_dim_obs_key = 'obs'
         else:
             cameras_to_exclude = [] # TODO add parameter for this
+            low_dim_obs_key = 'low_dim_obs'
         self.data_converter = ROSDataConverter(
             cfg=self.cfg.task.data_conversion,
             exclude_cameras=cameras_to_exclude,
-            camera_format='CHW' # for passing into model
+            camera_format='CHW', # for passing into model
+            low_dim_obs_key=low_dim_obs_key
         )
 
         topics, topic_info = self.data_converter.get_topics_and_info()
@@ -156,19 +161,23 @@ class ActionPredictor(Node):
     def srv_start_inference_callback(self, request, response):
         self.enable_inference = True
         self.inference_counter = self.num_actions_taken  # immediately trigger inference
+        return response
 
     def srv_stop_inference_callback(self, request, response):
         self.enable_inference = False
         self.srv_stop_action_callback(None, None)
+        return response
 
     def srv_start_action_callback(self, request, response):
         if self.enable_inference:
             self.enable_action = True
+        return response
     
     def srv_stop_action_callback(self, request, response):
         self.enable_action = False
         self.action_array = []
         self.action_counter = 0
+        return response
 
     def timer_callback(self):
         if np.any(~self.obs_received):

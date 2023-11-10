@@ -41,7 +41,7 @@ class CameraShape:
         return tuple(out)
 
 class ROSDataConverter:
-    def __init__(self, cfg, exclude_cameras: List[str]=[], camera_format='HWC'):
+    def __init__(self, cfg, exclude_cameras: List[str]=[], camera_format='HWC', low_dim_obs_key='low_dim_obs'):
         """
         cfg is bags config from hydra
         if exclude_cameras contains '*' all cameras will be excluded
@@ -58,6 +58,7 @@ class ROSDataConverter:
         self.low_dim_obs_names = []
         self.camera_names = []
         self.camera_format = camera_format
+        self.low_dim_obs_key = low_dim_obs_key
 
         # Determine where to place joint state data according to configuration
         self.joint_states = {}
@@ -315,7 +316,7 @@ class ROSDataConverter:
         # Format output dict
         out_dict = {
             'timestep': data_arrays[DataType.TIMESTEP],
-            'low_dim_obs': data_arrays[DataType.LOW_DIM_OBS],
+            self.low_dim_obs_key: data_arrays[DataType.LOW_DIM_OBS],
             'action': data_arrays[DataType.ACTION],
         }
 
