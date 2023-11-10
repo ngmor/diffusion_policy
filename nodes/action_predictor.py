@@ -220,6 +220,7 @@ class ActionPredictor(Node):
                 msg = geometry_msgs.msg.Wrench()
                 msg.force.x = float(self.action_array[self.action_counter][0])
                 msg.force.y = float(self.action_array[self.action_counter][1])
+                self.pub_action.publish(msg)
                 self.action_counter += 1
 
 
