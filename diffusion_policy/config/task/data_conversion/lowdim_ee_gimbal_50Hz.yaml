@@ -2,7 +2,7 @@ name: lowdim_ee_gimbal_50Hz
 
 input_path: ../../bags/combined
 output_path: ../../bags/converted/${task.data_conversion.name}
-rate: 15.0 # Hz
+rate: 50.0 # Hz
 
 joint_states:
   - topic: /omnid1/joint/joint_states
