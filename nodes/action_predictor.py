@@ -43,8 +43,8 @@ class ActionPredictor(Node):
     def __init__(self):
         super().__init__('action_predictor')
         # PARAMETERS
-        # self.declare_parameter('checkpoint_path', 'models/2023.11.06/20.56.59_train_diffusion_unet_image_omnid_image/checkpoints/best.ckpt')
-        self.declare_parameter('checkpoint_path', 'models/2023.11.10/11.53.05_train_diffusion_unet_lowdim_omnid_lowdim/checkpoints/best.ckpt')
+        self.declare_parameter('checkpoint_path', 'models/2023.11.06/20.56.59_train_diffusion_unet_image_omnid_image/checkpoints/best.ckpt')
+        # self.declare_parameter('checkpoint_path', 'models/2023.11.10/11.53.05_train_diffusion_unet_lowdim_omnid_lowdim/checkpoints/best.ckpt')
         checkpoint_path = self.get_parameter('checkpoint_path').get_parameter_value().string_value
 
         self.declare_parameter('num_inference_diffusion_timesteps', 16)
@@ -68,9 +68,7 @@ class ActionPredictor(Node):
         self.payload = torch.load(open(checkpoint_path, 'rb'), pickle_module=dill)
         self.cfg = self.payload['cfg']
         self.low_dim = 'lowdim' in self.cfg.task.name
-        # self.observation_rate = self.cfg.task.data_conversion.rate
-        # TODO revert to above
-        self.observation_rate = 50.0
+        self.observation_rate = self.cfg.task.data_conversion.rate
         self.observation_period = 1.0 / self.observation_rate
 
         workspace_cls = hydra.utils.get_class(self.cfg._target_)
