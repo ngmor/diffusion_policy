@@ -43,15 +43,12 @@ class ActionPredictor(Node):
     def __init__(self):
         super().__init__('action_predictor')
         # PARAMETERS
-        self.declare_parameter('checkpoint_path', 'src/diffusion_policy/data/outputs/2023.11.03/01.22.15_train_diffusion_unet_image_omnid_image/checkpoints/epoch=0000-train_loss=1.343.ckpt')
-        # self.declare_parameter('checkpoint_path', 'src/diffusion_policy/data/outputs/2023.11.03/01.22.46_train_diffusion_unet_lowdim_omnid_lowdim/checkpoints/epoch=0000-test_mean_score=0.000.ckpt')
+        # self.declare_parameter('checkpoint_path', 'models/2023.11.06/20.56.59_train_diffusion_unet_image_omnid_image/checkpoints/best.ckpt')
+        self.declare_parameter('checkpoint_path', 'models/2023.11.07/09.17.07_train_diffusion_unet_lowdim_omnid_lowdim/checkpoints/best.ckpt')
         checkpoint_path = self.get_parameter('checkpoint_path').get_parameter_value().string_value
 
         self.declare_parameter('num_inference_diffusion_timesteps', 16)
         self.num_inference_diffusion_timesteps = self.get_parameter('num_inference_diffusion_timesteps').get_parameter_value().integer_value
-
-        self.declare_parameter('num_actions_taken', 8)
-        self.num_actions_taken = self.get_parameter('num_actions_taken').get_parameter_value().integer_value
 
         # TODO method of disabling specific cameras
 
@@ -95,6 +92,9 @@ class ActionPredictor(Node):
             self.get_logger().info('DDIM noise scheduler not used, ignoring inference steps parameter')
             self.num_inference_diffusion_timesteps = self.policy.num_inference_steps
             self.set_parameters([Parameter(name='num_inference_diffusion_timesteps', value=self.num_inference_diffusion_timesteps)])
+
+        self.declare_parameter('num_actions_taken', self.policy.n_action_steps)
+        self.num_actions_taken = self.get_parameter('num_actions_taken').get_parameter_value().integer_value
 
         self.policy.n_action_steps = self.policy.horizon - self.policy.n_obs_steps + 1
 
@@ -146,7 +146,9 @@ class ActionPredictor(Node):
         self.action_counter = 0
         self.action_array = []
 
+        self.get_logger().info(f'Subscribing to: {self.data_converter.get_topics()}')
         self.get_logger().info(f'Synchronizing at {self.observation_rate} Hz')
+        self.get_logger().info(f'Horizon: {self.policy.horizon}, Observations: {self.policy.n_obs_steps}, Actions: {self.num_actions_taken}')
 
     def reset_obs_received(self):
         self.obs_received = np.full((len(self.last_message) - 1,), False)
@@ -209,18 +211,17 @@ class ActionPredictor(Node):
                 self.inference_thread = threading.Thread(target=self.infer)
                 self.inference_thread.start()
 
-
-        if not self.enable_action:
-            return
-
         # Perform actions from past inferences
         with self.action_data_mutex:
             if self.action_counter < len(self.action_array):
-                print(f'Performing action {self.action_counter}: {self.action_array[self.action_counter]}')
-                msg = geometry_msgs.msg.Wrench()
-                msg.force.x = float(self.action_array[self.action_counter][0])
-                msg.force.y = float(self.action_array[self.action_counter][1])
-                self.pub_action.publish(msg)
+                if self.enable_action:
+                    msg = geometry_msgs.msg.Wrench()
+                    msg.force.x = float(self.action_array[self.action_counter][0])
+                    msg.force.y = float(self.action_array[self.action_counter][1])
+                    self.pub_action.publish(msg)
+                    print(f'Performing action {self.action_counter}: {self.action_array[self.action_counter]}')
+                else:
+                    print(f'Simulating action {self.action_counter}: {self.action_array[self.action_counter]}')
                 self.action_counter += 1
 
 
