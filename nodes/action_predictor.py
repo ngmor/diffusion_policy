@@ -14,6 +14,7 @@ from diffusion_policy.common.pytorch_util import dict_apply
 import rclpy
 from rclpy.node import Node
 from rclpy.parameter import Parameter
+import rcl_interfaces.msg
 import geometry_msgs.msg
 import std_srvs.srv
 import message_filters
@@ -43,12 +44,14 @@ class ActionPredictor(Node):
     def __init__(self):
         super().__init__('action_predictor')
         # PARAMETERS
-        self.declare_parameter('checkpoint_path', 'models/2023.11.06/20.56.59_train_diffusion_unet_image_omnid_image/checkpoints/best.ckpt')
-        # self.declare_parameter('checkpoint_path', 'models/2023.11.10/11.53.05_train_diffusion_unet_lowdim_omnid_lowdim/checkpoints/best.ckpt')
+        # self.declare_parameter('checkpoint_path', 'models/2023.11.06/20.56.59_train_diffusion_unet_image_omnid_image/checkpoints/best.ckpt')
+        self.declare_parameter('checkpoint_path', 'models/lowdim/2023.11.10.20.23.57_train_diffusion_unet_lowdim_omnid_lowdim_Tp128_To64_Ta32_DDIM/best.ckpt')
         checkpoint_path = self.get_parameter('checkpoint_path').get_parameter_value().string_value
 
         self.declare_parameter('num_inference_diffusion_timesteps', 16)
         self.num_inference_diffusion_timesteps = self.get_parameter('num_inference_diffusion_timesteps').get_parameter_value().integer_value
+
+        self.add_on_set_parameters_callback(self.parameters_callback)
 
         # TODO method of disabling specific cameras
 
@@ -152,6 +155,28 @@ class ActionPredictor(Node):
         self.get_logger().info(f'Subscribing to: {self.data_converter.get_topics()}')
         self.get_logger().info(f'Synchronizing at {self.observation_rate} Hz')
         self.get_logger().info(f'Horizon: {self.policy.horizon}, Observations: {self.policy.n_obs_steps}, Actions: {self.num_actions_taken}')
+
+    def parameters_callback(self, params):
+        # TODO implement more parameters if necessary
+        success = True
+        reason = ''
+
+        for param in params:
+            if param.name == 'num_actions_taken':
+                if param.value > self.policy.n_action_steps:
+                    self.num_actions_taken = self.policy.n_action_steps
+                    message = f'Actions cannot be greater than the horizon ({self.policy.n_action_steps}, clamping.'
+                    self.get_logger().warn(message)
+                    reason += message
+                elif param.value < 0:
+                    self.num_actions_taken = 0
+                    message = 'Actions cannot be less than 0, clamping.'
+                    self.get_logger().warn(message)
+                    reason += message
+                else:
+                    self.num_actions_taken = param.value
+
+        return rcl_interfaces.msg.SetParametersResult(successful=success, reason=reason)
 
     def reset_obs_received(self):
         self.obs_received = np.full((len(self.last_message) - 1,), False)
