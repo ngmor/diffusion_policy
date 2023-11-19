@@ -190,6 +190,8 @@ class ActionPredictor(Node):
         return rcl_interfaces.msg.SetParametersResult(successful=success, reason=reason)
 
     def timer_model_details_callback(self):
+        self.model_details['inference_enabled'] = self.enable_inference
+        self.model_details['action_enabled'] = self.enable_action
         self.pub_model_details.publish(std_msgs.msg.String(data=yaml.dump(self.model_details)))
 
     def reset_obs_received(self):
