@@ -5,6 +5,7 @@ import dill
 import hydra
 import numpy as np
 import threading
+import yaml
 
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
 from diffusion_policy.policy.base_image_policy import BaseImagePolicy
@@ -16,6 +17,7 @@ from rclpy.node import Node
 from rclpy.parameter import Parameter
 import rcl_interfaces.msg
 import geometry_msgs.msg
+import std_msgs.msg
 import std_srvs.srv
 import message_filters
 
@@ -43,10 +45,15 @@ class LastMessageSubscriber:
 class ActionPredictor(Node):
     def __init__(self):
         super().__init__('action_predictor')
+
+        self.model_details = {}
+        self.timer_model_details = self.create_timer(1.0, self.timer_model_details_callback)
+
         # PARAMETERS
-        # self.declare_parameter('checkpoint_path', 'models/2023.11.06/20.56.59_train_diffusion_unet_image_omnid_image/checkpoints/best.ckpt')
-        self.declare_parameter('checkpoint_path', 'models/lowdim/2023.11.10.20.23.57_train_diffusion_unet_lowdim_omnid_lowdim_Tp128_To64_Ta32_DDIM/best.ckpt')
+        self.declare_parameter('checkpoint_path', 'models/image/2023.11.06.20.56.59_train_diffusion_unet_image_omnid_image_Tp16_To2_Ta8/best.ckpt')
+        # self.declare_parameter('checkpoint_path', 'models/lowdim/2023.11.10.15.02.29_train_diffusion_unet_lowdim_omnid_lowdim_Tp64_To32_Ta16_DDIM/best.ckpt')
         checkpoint_path = self.get_parameter('checkpoint_path').get_parameter_value().string_value
+        self.model_details['checkpoint_path'] = checkpoint_path
 
         self.declare_parameter('num_inference_diffusion_timesteps', 16)
         self.num_inference_diffusion_timesteps = self.get_parameter('num_inference_diffusion_timesteps').get_parameter_value().integer_value
@@ -57,6 +64,7 @@ class ActionPredictor(Node):
 
         # PUBLISHERS
         self.pub_action = self.create_publisher(geometry_msgs.msg.Wrench, '/omnid1/delta/additional_force', 10)
+        self.pub_model_details = self.create_publisher(std_msgs.msg.String, '/model_details', 10)
 
         # SERVICE SERVERS
         self.srv_start_inference = self.create_service(std_srvs.srv.Empty, 'start_inference', self.srv_start_inference_callback)
@@ -95,9 +103,11 @@ class ActionPredictor(Node):
             self.get_logger().info('DDIM noise scheduler not used, ignoring inference steps parameter')
             self.num_inference_diffusion_timesteps = self.policy.num_inference_steps
             self.set_parameters([Parameter(name='num_inference_diffusion_timesteps', value=self.num_inference_diffusion_timesteps)])
+        self.model_details['num_inference_diffusion_timesteps'] = self.num_inference_diffusion_timesteps
 
         self.declare_parameter('num_actions_taken', self.policy.n_action_steps)
         self.num_actions_taken = self.get_parameter('num_actions_taken').get_parameter_value().integer_value
+        self.model_details['num_actions_taken'] = self.num_actions_taken
 
         self.policy.n_action_steps = self.policy.horizon - self.policy.n_obs_steps + 1
 
@@ -175,8 +185,12 @@ class ActionPredictor(Node):
                     reason += message
                 else:
                     self.num_actions_taken = param.value
+                self.model_details['num_actions_taken'] = self.num_actions_taken
 
         return rcl_interfaces.msg.SetParametersResult(successful=success, reason=reason)
+
+    def timer_model_details_callback(self):
+        self.pub_model_details.publish(std_msgs.msg.String(data=yaml.dump(self.model_details)))
 
     def reset_obs_received(self):
         self.obs_received = np.full((len(self.last_message) - 1,), False)
