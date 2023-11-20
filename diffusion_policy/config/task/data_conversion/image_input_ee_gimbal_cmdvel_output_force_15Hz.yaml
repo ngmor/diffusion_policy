@@ -1,4 +1,4 @@
-name: image_ee_gimbal_15Hz
+name: image_input_ee_gimbal_cmdvel_output_force_15Hz
 
 input_path: ../../bags/combined
 output_path: ../../bags/converted/${task.data_conversion.name}
@@ -41,6 +41,17 @@ joint_states:
       - name: gimbal_z
         position:
           - low_dim
+
+twists:
+  - topic: /omnid1/cmd_vel
+    linear:
+      x:
+        - low_dim
+      y:
+        - low_dim
+    angular:
+      z:
+        - low_dim
 
 images:
   - topic: /overhead_camera/color/image_raw/compressed

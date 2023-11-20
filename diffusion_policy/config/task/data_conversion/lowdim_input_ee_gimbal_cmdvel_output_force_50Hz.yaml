@@ -1,9 +1,8 @@
-name: image_ee_gimbal_cmdvel_15Hz
+name: lowdim_input_ee_gimbal_cmdvel_output_force_50Hz
 
 input_path: ../../bags/combined
 output_path: ../../bags/converted/${task.data_conversion.name}
-rate: 15.0 # Hz
-image_shape: [3, 240, 320] # CHW, although images will be stored as HWC
+rate: 50.0 # Hz
 
 joint_states:
   - topic: /omnid1/joint/joint_states
@@ -52,11 +51,3 @@ twists:
     angular:
       z:
         - low_dim
-
-images:
-  - topic: /overhead_camera/color/image_raw/compressed
-    shape: ${task.data_conversion.image_shape}
-  - topic: /horizontal_camera/color/image_raw/compressed
-    shape: ${task.data_conversion.image_shape}
-  - topic: /onboard_camera/color/image_raw/compressed
-    shape: ${task.data_conversion.image_shape}
