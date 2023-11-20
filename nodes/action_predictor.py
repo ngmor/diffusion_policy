@@ -17,6 +17,7 @@ from rclpy.node import Node
 from rclpy.parameter import Parameter
 import rcl_interfaces.msg
 import geometry_msgs.msg
+import sensor_msgs.msg
 import std_msgs.msg
 import std_srvs.srv
 import message_filters
@@ -58,6 +59,9 @@ class ActionPredictor(Node):
         self.declare_parameter('num_inference_diffusion_timesteps', 16)
         self.num_inference_diffusion_timesteps = self.get_parameter('num_inference_diffusion_timesteps').get_parameter_value().integer_value
 
+        self.declare_parameter('use_residuals', False)
+        self.use_residuals = self.get_parameter('use_residuals').get_parameter_value().bool_value
+
         self.add_on_set_parameters_callback(self.parameters_callback)
 
         # TODO method of disabling specific cameras
@@ -65,6 +69,14 @@ class ActionPredictor(Node):
         # PUBLISHERS
         self.pub_action = self.create_publisher(geometry_msgs.msg.Wrench, '/omnid1/delta/additional_force', 10)
         self.pub_model_details = self.create_publisher(std_msgs.msg.String, '/model_details', 10)
+
+        # SUBSCRIBERS
+        self.sub_joint_states = self.create_subscription(
+            sensor_msgs.msg.JointState,
+            '/omnid1/joint/joint_states',
+            self.sub_joint_states_callback,
+            10
+        )
 
         # SERVICE SERVERS
         self.srv_start_inference = self.create_service(std_srvs.srv.Empty, 'start_inference', self.srv_start_inference_callback)
@@ -162,6 +174,8 @@ class ActionPredictor(Node):
         self.action_counter = 0
         self.action_array = []
 
+        self.last_ee_force = geometry_msgs.msg.Vector3()
+
         self.get_logger().info(f'Subscribing to: {self.data_converter.get_topics()}')
         self.get_logger().info(f'Synchronizing at {self.observation_rate} Hz')
         self.get_logger().info(f'Horizon: {self.policy.horizon}, Observations: {self.policy.n_obs_steps}, Actions: {self.num_actions_taken}')
@@ -186,13 +200,25 @@ class ActionPredictor(Node):
                 else:
                     self.num_actions_taken = param.value
                 self.model_details['num_actions_taken'] = self.num_actions_taken
+            elif param.name == 'use_residuals':
+                self.use_residuals = param.value
 
         return rcl_interfaces.msg.SetParametersResult(successful=success, reason=reason)
 
     def timer_model_details_callback(self):
         self.model_details['inference_enabled'] = self.enable_inference
         self.model_details['action_enabled'] = self.enable_action
+        self.model_details['use_residuals'] = self.use_residuals
         self.pub_model_details.publish(std_msgs.msg.String(data=yaml.dump(self.model_details)))
+
+    def sub_joint_states_callback(self, msg: sensor_msgs.msg.JointState):
+        x_ndx = msg.name.index('x')
+        y_ndx = msg.name.index('y')
+        z_ndx = msg.name.index('z')
+
+        self.last_ee_force.x = msg.effort[x_ndx]
+        self.last_ee_force.y = msg.effort[y_ndx]
+        self.last_ee_force.z = msg.effort[z_ndx]
 
     def reset_obs_received(self):
         self.obs_received = np.full((len(self.last_message) - 1,), False)
@@ -262,14 +288,21 @@ class ActionPredictor(Node):
         # Perform actions from past inferences
         with self.action_data_mutex:
             if self.action_counter < len(self.action_array):
+                x = float(self.action_array[self.action_counter][0])
+                y = float(self.action_array[self.action_counter][1])
+
+                if self.use_residuals:
+                    x -= self.last_ee_force.x
+                    y -= self.last_ee_force.y
+
                 if self.enable_action:
                     msg = geometry_msgs.msg.Wrench()
-                    msg.force.x = float(self.action_array[self.action_counter][0])
-                    msg.force.y = float(self.action_array[self.action_counter][1])
+                    msg.force.x = x
+                    msg.force.y = y
                     self.pub_action.publish(msg)
-                    print(f'Performing action {self.action_counter}: {self.action_array[self.action_counter]}')
+                    print(f'Performing action {self.action_counter}: {x, y}')
                 else:
-                    print(f'Simulating action {self.action_counter}: {self.action_array[self.action_counter]}')
+                    print(f'Simulating action {self.action_counter}: {x, y}')
                 self.action_counter += 1
 
 
