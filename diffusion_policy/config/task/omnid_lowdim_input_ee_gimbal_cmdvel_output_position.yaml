@@ -1,8 +1,8 @@
 defaults:
   - _self_
-  - data_conversion: lowdim_input_ee_gimbal_cmdvel_output_force_50Hz
+  - data_conversion: lowdim_input_ee_gimbal_cmdvel_output_position_50Hz
 
-name: omnid_lowdim_input_ee_gimbal_cmdvel_output_force
+name: omnid_lowdim_input_ee_gimbal_cmdvel_output_position
 
 dataset_path: ../../bags/converted/${task.data_conversion.name}
 

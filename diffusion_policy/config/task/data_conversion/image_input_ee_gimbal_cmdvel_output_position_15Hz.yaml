@@ -1,0 +1,62 @@
+name: image_input_ee_gimbal_cmdvel_output_position_15Hz
+
+input_path: ../../bags/combined
+output_path: ../../bags/converted/${task.data_conversion.name}
+rate: 15.0 # Hz
+image_shape: [3, 240, 320] # CHW, although images will be stored as HWC
+
+joint_states:
+  - topic: /omnid1/joint/joint_states
+    joints:
+      - name: x
+        position:
+          - action
+          - low_dim
+        velocity:
+          - low_dim
+        effort:
+          - low_dim
+      - name: y
+        position:
+          - action
+          - low_dim
+        velocity:
+          - low_dim
+        effort:
+          - low_dim
+      - name: z
+        position:
+          - action
+          - low_dim
+        velocity:
+          - low_dim
+        effort:
+          - low_dim
+      - name: gimbal_x
+        position:
+          - low_dim
+      - name: gimbal_y
+        position:
+          - low_dim
+      - name: gimbal_z
+        position:
+          - low_dim
+
+twists:
+  - topic: /omnid1/cmd_vel
+    linear:
+      x:
+        - low_dim
+      y:
+        - low_dim
+    angular:
+      z:
+        - low_dim
+
+images:
+  - topic: /overhead_camera/color/image_raw/compressed
+    shape: ${task.data_conversion.image_shape}
+  - topic: /horizontal_camera/color/image_raw/compressed
+    shape: ${task.data_conversion.image_shape}
+  - topic: /onboard_camera/color/image_raw/compressed
+    shape: ${task.data_conversion.image_shape}
