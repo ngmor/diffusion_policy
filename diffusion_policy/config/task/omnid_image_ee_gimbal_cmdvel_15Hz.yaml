@@ -1,8 +1,8 @@
 defaults:
   - _self_
-  - data_conversion: image_ee_gimbal_15Hz
+  - data_conversion: image_ee_gimbal_cmdvel_15Hz
 
-name: omnid_image_ee_gimbal_15Hz
+name: omnid_image_ee_gimbal_cmdvel_15Hz
 
 dataset_path: ../../bags/converted/${task.data_conversion.name}
 
@@ -21,7 +21,7 @@ shape_meta: &shape_meta
       shape: *image_shape
       type: rgb
     low_dim_obs:
-      shape: [12]
+      shape: [15]
       type: low_dim
   action:
     shape: [3]

@@ -1,0 +1,53 @@
+name: lowdim_ee_gimbal_cmdvel_50Hz
+
+input_path: ../../bags/combined
+output_path: ../../bags/converted/${task.data_conversion.name}
+rate: 50.0 # Hz
+
+joint_states:
+  - topic: /omnid1/joint/joint_states
+    joints:
+      - name: x
+        position:
+          - low_dim
+        velocity:
+          - low_dim
+        effort:
+          - action
+          - low_dim
+      - name: y
+        position:
+          - low_dim
+        velocity:
+          - low_dim
+        effort:
+          - action
+          - low_dim
+      - name: z
+        position:
+          - low_dim
+        velocity:
+          - low_dim
+        effort:
+          - action
+          - low_dim
+      - name: gimbal_x
+        position:
+          - low_dim
+      - name: gimbal_y
+        position:
+          - low_dim
+      - name: gimbal_z
+        position:
+          - low_dim
+
+twists:
+  - topic: /omnid1/cmd_vel
+    linear:
+      x:
+        - low_dim
+      y:
+        - low_dim
+    angular:
+      z:
+        - low_dim
