@@ -51,9 +51,10 @@ class ActionPredictor(Node):
         self.timer_model_details = self.create_timer(1.0, self.timer_model_details_callback)
 
         # PARAMETERS
-        self.declare_parameter('checkpoint_path', 'models/image/2023.11.06.20.56.59_train_diffusion_unet_image_omnid_image_Tp16_To2_Ta8/best.ckpt')
-        # self.declare_parameter('checkpoint_path', 'models/lowdim/2023.11.10.15.02.29_train_diffusion_unet_lowdim_omnid_lowdim_Tp64_To32_Ta16_DDIM/best.ckpt')
+        self.declare_parameter('checkpoint_path', '')
         checkpoint_path = self.get_parameter('checkpoint_path').get_parameter_value().string_value
+        if checkpoint_path == '':
+            raise Exception('No checkpoint provided for loading model')
         self.model_details['checkpoint_path'] = checkpoint_path
 
         self.declare_parameter('num_inference_diffusion_timesteps', 16)
