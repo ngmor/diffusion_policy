@@ -15,14 +15,26 @@ OmegaConf.register_new_resolver("eval", eval, replace=True)
 @click.command()
 @click.option('-c', '--config', required=True)
 def main(config):
+    """
+    Convert ROS bags into zarray, the data format used for training models in this repo.
+
+    Args:
+        config (str): data_conversion config that defines how to convert the ROS messages into the
+            input/output formats for the diffusion policy model.
+    """
+
+    # Fake reading full hydra config for the diffusion policy repo. All I care about here
+    # is the data_conversion config, but the way hydra works you can't just read nested configs
+    # without the entire config
     hydra.initialize(config_path='../config', job_name='convert_bag', version_base=None)
     cfg = hydra.compose(
-        config_name='train_diffusion_unet_real_image_workspace', # Doesn't matter which this is
+        config_name='train_diffusion_unet_real_image_workspace',  # Doesn't matter which this is
         overrides=[
-            'task=omnid_image',
-            f'task/data_conversion={config}',
+            'task=omnid_image',  # Doesn't matter which this is
+            f'task/data_conversion={config}',  # only thing that matters, and it's an input to
+                                               # the script through click (see above)
         ]
-    ).task.data_conversion
+    ).task.data_conversion  # access the data_conversion config
 
     # Init replay buffer for handling output
     output_dir = pathlib.Path(cfg.output_path)

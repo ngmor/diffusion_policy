@@ -11,13 +11,22 @@ import sensor_msgs.msg
 import geometry_msgs.msg
 
 class DataType(Enum):
+    """Enumeration for what type of data (in relation to diffusion policy model inputs/outputs) a certain value is."""
     TIMESTEP = enum_auto()
     ACTION = enum_auto()
     LOW_DIM_OBS = enum_auto()
     IMG = enum_auto()
 
 class DataLocator:
+    """Class which holds information about where to find/place data in input/output arrays for diffusion policy models."""
     def __init__(self, dtype: DataType, ndx: int):
+        """
+        Initialize data locator object.
+
+        Args:
+            dtype (DataType): the type of data for a certain value
+            ndx (int): the index in that data type's output array where that certain value can be found
+        """
         self._dtype = dtype
         self._ndx = ndx
     def __repr__(self) -> str:
@@ -30,28 +39,63 @@ class DataLocator:
         return self._ndx
 
 class CameraShape:
+    """Helper class for storing the dimensions of camera images and returning them in any requested format."""
     def __init__(self, C, H, W):
+        """
+        Initialize camera shape object.
+
+        Args:
+            C (int): number of channels in the image
+            H (int): height of the image in pixels
+            W (int): width of the image in pixels
+        """
         self.C = C
         self.H = H
         self.W = W
     def as_tuple(self, format):
+        """
+        Return image shape as a tuple in the requested format.
+
+        Args:
+            format (str): a string consisting of the characters 'C', 'H', and 'W' in any
+                arbitrary order. This order determines the order of the output tuple
+
+        Returns:
+            Tuple[int]: image shape in the requested format
+        """
         out = list()
         for dim in format:
             out.append(getattr(self, dim))
         return tuple(out)
 
 class ROSDataConverter:
-    def __init__(self, cfg, exclude_cameras: List[str]=[], camera_format='HWC', low_dim_obs_key='low_dim_obs'):
+    """Converts input data frames of ROS messages into np arrays of the format expected by a diffusion policy model."""
+
+    def __init__(
+        self,
+        cfg,
+        exclude_cameras: List[str]=[],
+        camera_format='HWC',
+        low_dim_obs_key='low_dim_obs'
+    ):
         """
-        cfg is bags config from hydra
-        if exclude_cameras contains '*' all cameras will be excluded
-        camera_format determines the shape of the output camera data frames
+        Initialize/configure data converter.
+
+        Args:
+            cfg: "data_conversion" config from hydra. This is the "task.data_conversion" member of
+                the full hydra config that the diffusion_policy repo uses
+            exclude_cameras (List[str], optional): Cameras to exclude from the data. If the list
+                contains '*', all cameras will be excluded. Defaults to empty.
+            camera_format (str, optional): a string containing the characters 'H' (height),
+                'W' (width), and 'C' (channels). This defines the output shape of the image data.
+                Defaults to 'HWC'.
+            low_dim_obs_key (str, optional): the key of the low dim observation data in the
+                conversion output. Defaults to 'low_dim_obs'.
         """
         self.cfg = cfg
         # TODO - how to handle not having input actions(?)
 
-        # Determine what topics will go where in output data
-        # based on config
+        # Initialize/store class configuration variables
         self.topics = []
         self.topic_info = {}
         self.actions_names = []
@@ -60,6 +104,7 @@ class ROSDataConverter:
         self.camera_format = camera_format
         self.low_dim_obs_key = low_dim_obs_key
 
+        # Determine what topics will go where in output data based on configuration
         # Determine where to place joint state data according to configuration
         self.joint_states = {}
         if hasattr(cfg, 'joint_states'):
@@ -76,7 +121,8 @@ class ROSDataConverter:
                     self._place_scalar_attribute(
                         joint,
                         'position',
-                        namespace, self.joint_states[topic.topic][joint.name]
+                        namespace,
+                        self.joint_states[topic.topic][joint.name]
                     )
                     self._place_scalar_attribute(
                         joint,
@@ -131,6 +177,7 @@ class ROSDataConverter:
         self.bridge = CvBridge()
 
     def _add_topic(self, topic, msg_type):
+        """Add a topic to the list of input topics and determine its index in that list."""
         self.topic_info[topic] = {
             'ndx': len(self.topics),
             'type': msg_type
@@ -144,6 +191,32 @@ class ROSDataConverter:
         namespace: str,
         locator_dict: dict
     ):
+        """
+        Determines the location in the output data for a scalar value in ROS message.
+
+        The "data_conversion" config defines how ROS messages are parsed into low dim observations
+        and actions. A scalar value in a ROS message (ex: a joint's effort) may be placed into one
+        or both of the low dim observations array (an input to the diffusion policy model) and the
+        actions array (the output of the diffusion policy model). This function reads the scalar
+        attribute (attr) of an object (obj) in the config structure, parses it, and determines
+        the placement of this scalar value in those arrays accordingly.
+
+        Args:
+            obj (Any): the member of the config structure to search for the attribute in.
+            attr (str): the name of the attribute, which may or may not exist in the config
+                structure. If it is there, it will be included in the arrays where indicated by its
+                value
+            namespace (str): previous human-readable path to this config member, including the
+                topic, etc. Used to compile a human-readable list of members of each array
+            locator_dict (dict): the dictionary in which to store a list of DataLocator objects,
+                which contains information about where the attribute is to be placed in the
+                appropriate arrays
+
+        Raises:
+            Exception: if the value of the attribute is not a list consisting only of 'low_dim',
+                'action', or both.
+        """
+        
         # Check if the object has this attribute
         if hasattr(obj, attr):
             full_name = namespace + '.' + attr
@@ -181,6 +254,23 @@ class ROSDataConverter:
         namespace: str,
         locator_dist: dict
     ):
+        """
+        Place multiple scalar sub-attributes of an attribute of an object in the config structure.
+
+        See _place_scalar_attribute for more info on what placing an attribute does.
+
+
+        Args:
+            obj (Any): the member of the config structure to search for the attribute in.
+            attr (str): the name of the attribute, which may or may not exist in the config
+                structure.
+            sub_attrs (List[str]): sub attributes of the attribute to place
+            namespace (str): previous human-readable path to this config member, including the
+                topic, etc. Used to compile a human-readable list of members of each array
+            locator_dict (dict): the dictionary in which to store a list of DataLocator objects,
+                which contains information about where the attribute is to be placed in the
+                appropriate arrays
+        """
         if hasattr(obj, attr):
             full_name = namespace + '.' + attr
 
@@ -193,6 +283,22 @@ class ROSDataConverter:
                 locator_dist[attr] = temp_dict
 
     def convert_data_frames(self, data_frames: List):
+        """
+        # Convert an input list of data frames of ROS messages to the np array format of the
+        inputs/outputs of the diffusion policy model.
+
+        Args:
+            data_frames (List): list of data frames to convert. Each data frame itself should be a
+            list, which contains ROS messages in the proper order as determined by the configuration
+            of this converter object. A list of the topics for these messages in the proper order
+            can be obtained by using the get_topics method.
+
+        Returns:
+            dict: dictionary containing keys for each data type ('low_dim_obs', 'action', etc). The
+                values are the converted data as np arrays.
+                Note: low_dim_obs key is determined by the constructor of this class
+        """
+
         # Map from data types to output data arrays
         data_arrays = {
             DataType.TIMESTEP: np.zeros(
@@ -326,18 +432,23 @@ class ROSDataConverter:
         return out_dict
 
     def get_topics(self):
+        """Get ordered list of all topics from which an input data frame should have messages."""
         return self.topics
     
     def get_topic_info(self):
+        """Get dictionary that maps topic names to info about the topics (index in topic list, message type)."""
         return self.topic_info
 
     def get_topics_and_info(self):
+        """Return outputs of get_topics and get_topic_info as a tuple."""
         return (self.get_topics(), self.get_topic_info())
 
     def get_camera_names(self):
+        """Get names of cameras."""
         return self.camera_names
     
     def get_format(self):
+        """Get human-readable format of inputs/outputs of diffusion policy model."""
         out_format = {
             'action': self.actions_names,
             'low_dim_obs': self.low_dim_obs_names,
