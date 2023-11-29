@@ -100,8 +100,6 @@ class ActionPredictor(Node):
 
         # TODO method of disabling specific cameras
 
-        # PUBLISHERS
-        self.pub_action = self.create_publisher(geometry_msgs.msg.Wrench, '/omnid1/delta/additional_force', 10)
         self.pub_model_details = self.create_publisher(std_msgs.msg.String, '/model_details', 10)
 
         # SUBSCRIBERS
@@ -131,20 +129,36 @@ class ActionPredictor(Node):
         self.low_dim = 'lowdim' in self.cfg.task.name
 
         # Determine what the output action is
-        if 'output_force' in self.cfg.task.name:
-            self.action_type = ActionType.FORCE
-        elif 'output_position' in self.cfg.task.name:
-            self.action_type = ActionType.POSITION
-        else:
-            raise Exception('Action type is not implemented in this node')
+        output_type_map = {
+            'output_force': ActionType.FORCE,
+            'output_position': ActionType.POSITION
+        }
+
+        self.action_type = None
+        for output_type in output_type_map.keys():
+            if output_type in self.cfg.task.name:
+                self.action_type = output_type_map[output_type]
+                break
+        
+        # Workaround for old trained models that don't have output_types in their task name
+        if self.action_type is None:
+            self.declare_parameter('output_type_override', 'none')
+            output_type = self.get_parameter('output_type_override').get_parameter_value().string_value
+            if output_type in output_type_map:
+                self.action_type = output_type_map[output_type]
+            else:
+                raise Exception(f'Action type is not implemented in this node')
 
         self.residuals_allowed = False
 
+        # Configure based on output action type
         if self.action_type == ActionType.FORCE:
             self.residuals_allowed = True
+            self.pub_action = self.create_publisher(geometry_msgs.msg.Wrench, '/omnid1/delta/additional_force', 10)
         elif self.action_type == ActionType.POSITION:
-            pass
+            self.pub_action = self.create_publisher(geometry_msgs.msg.PointStamped, '/omnid1/delta/desired_position', 10)
 
+        # Disable residuals if not allowed with a certain action type
         if not self.residuals_allowed:
             self.get_logger().info(f'Residuals not allowed with {self.action_type.name} model, disabling.')
             self.use_residuals = False
@@ -264,6 +278,7 @@ class ActionPredictor(Node):
         self.action_counter = 0
         self.action_array = []
 
+        self.last_ee_position = geometry_msgs.msg.PointStamped(point=geometry_msgs.msg.Point(z=0.3))
         self.last_ee_force = geometry_msgs.msg.Vector3()
 
         self.get_logger().info(f'Subscribing to: {self.data_converter.get_topics()}')
@@ -312,11 +327,14 @@ class ActionPredictor(Node):
         self.pub_model_details.publish(std_msgs.msg.String(data=yaml.dump(self.model_details)))
 
     def sub_joint_states_callback(self, msg: sensor_msgs.msg.JointState):
-        """Get last end effector forces for use with residual force actions."""
+        """Get latest joint state data."""
         x_ndx = msg.name.index('x')
         y_ndx = msg.name.index('y')
         z_ndx = msg.name.index('z')
 
+        self.last_ee_position.point.x = msg.position[x_ndx]
+        self.last_ee_position.point.y = msg.position[y_ndx]
+        self.last_ee_position.point.z = msg.position[z_ndx]
         self.last_ee_force.x = msg.effort[x_ndx]
         self.last_ee_force.y = msg.effort[y_ndx]
         self.last_ee_force.z = msg.effort[z_ndx]
@@ -353,6 +371,8 @@ class ActionPredictor(Node):
     def timer_callback(self):
         """Main timer callback that handles recording observations, triggering inferences, and performing actions."""
         
+        callback_time = self.get_clock().now()
+
         # Check that an observation has been received on all input topics
         if np.any(~self.obs_received):
             if not self.at_least_one_of_each_obs_received:
@@ -374,7 +394,7 @@ class ActionPredictor(Node):
             # honestly this "synchronization" is pretty terrible and isn't really synchronization at
             # all. But I didn't like how the message_filters library was performing (I couldn't
             # control the rate) and didn't have a ton of time to make a better solution
-            self.last_message[-1] = self.get_clock().now().nanoseconds
+            self.last_message[-1] = callback_time.nanoseconds
 
             if len(self.obs_data_queue) < self.cfg.n_obs_steps:
                 self.obs_data_queue.append(self.last_message)
@@ -412,22 +432,41 @@ class ActionPredictor(Node):
 
             # Perform actions until the end of the inferred action list is reached
             if self.action_counter < len(self.action_array):
-                x = float(self.action_array[self.action_counter][0])
-                y = float(self.action_array[self.action_counter][1])
 
-                if self.use_residuals:
-                    x -= self.last_ee_force.x
-                    y -= self.last_ee_force.y
+                if self.action_type == ActionType.FORCE:
+                    x = float(self.action_array[self.action_counter][0])
+                    y = float(self.action_array[self.action_counter][1])
 
-                if self.enable_action:
-                    msg = geometry_msgs.msg.Wrench()
-                    msg.force.x = x
-                    msg.force.y = y
-                    self.pub_action.publish(msg)
-                    print(f'Performing action {self.action_counter}: {x, y}')
-                else:
-                    print(f'Simulating action {self.action_counter}: {x, y}')
+                    if self.use_residuals:
+                        x -= self.last_ee_force.x
+                        y -= self.last_ee_force.y
+
+                    printable_action = (x,y)
+
+                    if self.enable_action:
+                        msg = geometry_msgs.msg.Wrench()
+                        msg.force.x = x
+                        msg.force.y = y
+                        self.pub_action.publish(msg)
+                        print(f'Performing action {self.action_counter}: {printable_action}')
+                    else:
+                        print(f'Simulating action {self.action_counter}: {printable_action}')
                 
+                elif self.action_type == ActionType.POSITION:
+                    msg = geometry_msgs.msg.PointStamped()
+                    msg.header.stamp = callback_time
+                    msg.point.x = float(self.action_array[self.action_counter][0])
+                    msg.point.y = float(self.action_array[self.action_counter][1])
+                    msg.point.z = self.last_ee_position.point.z
+                    
+                    printable_action = (msg.point.x, msg.point.y, msg.point.z)
+
+                    if self.enable_action:
+                        self.pub_action.publish(msg)
+                        print(f'Performing action {self.action_counter}: {printable_action}')
+                    else:
+                        print(f'Simulating action {self.action_counter}: {printable_action}')
+
                 # Keeps track of which action in the inferred action list is being performed.
                 # is reset when a new inference completes.
                 self.action_counter += 1
