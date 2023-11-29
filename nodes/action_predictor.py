@@ -138,6 +138,18 @@ class ActionPredictor(Node):
         else:
             raise Exception('Action type is not implemented in this node')
 
+        self.residuals_allowed = False
+
+        if self.action_type == ActionType.FORCE:
+            self.residuals_allowed = True
+        elif self.action_type == ActionType.POSITION:
+            pass
+
+        if not self.residuals_allowed:
+            self.get_logger().info(f'Residuals not allowed with {self.action_type.name} model, disabling.')
+            self.use_residuals = False
+            self.set_parameters([Parameter(name='use_residuals', value=self.use_residuals)])
+
         # Different models are trained on data that is decimated at different rates
         # this rate is used for the timer that will collect data/perform actions
         self.observation_rate = self.cfg.task.data_conversion.rate
@@ -280,7 +292,15 @@ class ActionPredictor(Node):
                     self.num_actions_taken = param.value
                 self.model_details['num_actions_taken'] = self.num_actions_taken
             elif param.name == 'use_residuals':
-                self.use_residuals = param.value
+                if not self.residuals_allowed:
+                    self.use_residuals = False
+                    if param.value:
+                        success = False
+                        message = f'Residuals not allowed with {self.action_type.name} model, disabling.'
+                        self.get_logger().warn(message)
+                        reason += message
+                else:
+                    self.use_residuals = param.value
 
         return rcl_interfaces.msg.SetParametersResult(successful=success, reason=reason)
 
