@@ -454,7 +454,7 @@ class ActionPredictor(Node):
                 
                 elif self.action_type == ActionType.POSITION:
                     msg = geometry_msgs.msg.PointStamped()
-                    msg.header.stamp = callback_time
+                    msg.header.stamp = callback_time.to_msg()
                     msg.point.x = float(self.action_array[self.action_counter][0])
                     msg.point.y = float(self.action_array[self.action_counter][1])
                     msg.point.z = self.last_ee_position.point.z
