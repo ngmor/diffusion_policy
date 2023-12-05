@@ -1,3 +1,38 @@
+# Omnid Diffusion Policy
+
+This repository contains updates to the diffusion policy code to be used with Northwestern's [omnidirectional mobile cobots](https://arxiv.org/abs/2206.14293).
+
+## Environment
+Ubuntu 22.04
+
+ROS 2 Iron
+
+TODO - environment setup bash script
+
+## Important Commands
+
+TODO - convert data, train, run ROS node
+
+## Changelog
+For use by future researchers at Northwestern, here is a list of files in the repository I changed/added and the rationale why.
+
+- [env_setup.bash](env_setup.bash) - a quick and dirty bash script that (as of the writing of this README) works for setting up the proper Python virtual environment to run this repository on Ubuntu 22.04.
+- [package.xml](package.xml) - so this repository can be built as an `ament_cmake` ROS package.
+- [CMakeLists.txt](CMakeLists.txt) - so this repository can be built as an `ament_cmake` ROS package.
+- [__init__.py](diffusion_policy/__init__.py) - so code can be used as a Python module in, for example, the ROS `action_predictor` node.
+- [ros_util.py](diffusion_policy/common/ros_util.py) - a module for ROS utilities for the `diffusion_policy` package. Most importantly, the `ROSDataConverter` class accepts input data frames of ROS messages and converts them into the NumPy array format expected as input to the diffusion policy model. This is used in the `action_predictor` node to convert data before performing an inference and in the `omnid_bag_conversion` script to convert data before saving it as a `.zarr` for training.
+- [data_conversion configs](diffusion_policy/config/task/data_conversion/) - these files determine how ROS messages from ROS bags are converted into the `.zarr` format expected as input for training this policy. They determine what data is input to/output from the model, and the rate at which the data is decimated. They are also read by the `action_predictor` node so it can automatically configure itself to subscribe to the proper ROS topics based on whatever model is loaded.
+- [omnid_bag_conversion.py](diffusion_policy/scripts/omnid_bag_conversion.py) - a script to convert ROS bags of training data to the `.zarr` format expected for training. Conversion is specified by the `data_conversion` config files.
+- [task configs with the "omnid" prefix](diffusion_policy/config/task) - task configurations for omnid tasks, both with input image data ("image") and without ("lowdim"). Right now these are pretty much 1:1 with the `data_conversion` config files, though potentially one `data_conversion` file could be used with multiple `task` configs if they use the same data format and decimation rate.
+- [action_predictor.py](nodes/action_predictor.py) - a ROS node that performs the action prediction and executes actions by publishing on the appropriate topic. It loads a checkpoint from training the diffusion policy and automatically configures itself based on the configuration found in the checkpoint.
+- [omnid_image_dataset.py](diffusion_policy/dataset/omnid_image_dataset.py) - PyTorch dataset loader that handles loading data for `omnid_image` tasks.
+- [omnid_lowdim_dataset.py](diffusion_policy/dataset/omnid_lowdim_dataset.py) - PyTorch dataset loader that handles loading data for `omnid_lowdim` tasks.
+- [omnid_image_runner.py](diffusion_policy/env_runner/omnid_image_runner.py) - empty environment runner for `omnid_image` tasks.
+- [omnid_lowdim_runner.py](diffusion_policy/env_runner/omnid_lowdim_runner.py) - empty environment runner for `omnid_lowdim` tasks.
+
+
+Below is this repository's original README.
+
 # Diffusion Policy
 
 [[Project page]](https://diffusion-policy.cs.columbia.edu/)
