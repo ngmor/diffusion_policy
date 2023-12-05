@@ -87,10 +87,13 @@ More info on the node:
 #### Parameters
 - `checkpoint_path` - required, Checkpoint file (`.ckpt`) that contains model weights and config info.
 - `num_inference_diffusion_timesteps` - Number of timesteps the diffusion model uses for inference. Overrides only accepted if a DDIM noise scheduler is used.
-- `use_residuals` - If true, residuals are used. That is, the published action is the predicted action minus the actual current value for that action (from external sources)
+- `num_actions_taken` - Number of actions taken based on an inference before a new inference is used. Min is 0 (inferences occur continously). Max is the prediction horizon of the model. This is dynamically settable at runtime through the ROS 2 parameter CLI.
+- `use_residuals` - If true, residuals are used. That is, the published action is the predicted action minus the actual current value for that action (from external sources). This is dynamically settable at runtime through the ROS 2 parameter CLI.
+- `output_override_type` - some old models were trained before the output type was included in the name of the task. This is a workaround to manually specify the action type ("output_force" or "output_position") with a parameter.
 
 #### Publishers
 - `/model_details` (std_msgs/msg/String) - carries YAML formatted data about the model that is currently loaded.
+- Model outputs - switches between `/omnid1/delta/additional_force` if model output is force and `/omnid1/delta/desired_position` if the output is position. Output of base twist is not yet supported.
 #### Subscribers
 - `/omnid1/joint/joint_states` (sensor_msgs/msg/JointState) - joint states for use with action residuals
 - Model inputs - subscribers are dynamically created for this data based on the model configuration.
@@ -103,7 +106,7 @@ More info on the node:
 ## Defining new configurations
 If training configurations do not require different data formatting/inputs/outputs, settings can be changed by simply providing overrides when [calling the training command](#train).
 
-If new training configurations required different data format settings (ex: decimation rate) or different inputs/outputs to the model, two files will have to be created.
+If new training configurations require different data format settings (ex: decimation rate) or different inputs/outputs to the model, two files will have to be created.
 
 ### 1. Task Config
 Located at `ws/src/diffusion_policy/diffusion_policy/config/task/`, these task config files define task info for the model. Most of these files I left as essentially default based on the other config examples in the repo. It's important to set the `defaults.data_conversion` to the correct `data_conversion` config and match the observation/action dimensions with that `data_conversion` config.
@@ -117,7 +120,7 @@ I defined the format of this config file, it was not in this original repository
 - `input_path`: path to ROS bags to convert (from the `ws/src/diffusion_policy` directory)
 - `output_path`: path to output the converted data (from the `ws/src/diffusion_policy` directory)
 - `rate` - rate at which to decimate the data. ROS messages faster than this rate will be averaged in the frames of the output data.
-- `image_shape` - shape (CHW) of images that are input into the model. Images in the ROS bags that are of different sizes will be converted to this shape (though the task/data_conversion configs are flexible enough if you want to define different images in different shapes).
+- `image_shape` - shape (CHW) of images that are input into the model. Images in the ROS bags that are of different sizes will be converted to this shape (though the task/data_conversion configs are flexible enough if you want to define different shapes for different images).
 - `joint_states` - topics of the type `sensor_msgs/msg/JointState` to use for input/output data of the model. Data marked as `low_dim` will be used in the `low_dim` model input data. Data marked as `action` will be used as model output. Any data can be labeled as both. Follow the example format to properly configure.
 - `twists` - topics of the type `geometry_msgs/msg/Twist` to use for input/output data of the model. Data marked as `low_dim` will be used in the `low_dim` model input data. Data marked as `action` will be used as model output. Any data can be labeled as both. Follow the example format to properly configure.
 - `images` - topics of the type `sensor_msgs/msg/CompressedImage` to use for input to the model. Follow the example format to properly configure.
