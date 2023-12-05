@@ -4,7 +4,7 @@ defaults:
 
 name: omnid_lowdim
 
-dataset_path: ../../bags/converted/conversion_test
+dataset_path: ../../bags/converted/${task.data_conversion.name}
 
 # Shapes must match the "bags" conversion config file
 obs_dim: 33

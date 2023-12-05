@@ -2,16 +2,129 @@
 
 This repository contains updates to the diffusion policy code to be used with Northwestern's [omnidirectional mobile cobots](https://arxiv.org/abs/2206.14293).
 
-## Environment
-Ubuntu 22.04
+## Setup
+Follow the file structure/environment setup to get things running. The setup/dependencies are not super clean and could be improved.
 
-ROS 2 Iron
+### File structure
 
-TODO - environment setup bash script, need omnid_data_collection repo
+I have made this repository a ROS package, and so everything is now set up as if this repository is in the `src` folder of a workspace `ws`.
+
+```
+ws
+├── bags
+│   ├── combined - training data as ROS bags (combined from omnid and station)
+│   └── converted - training data as .zarr (output of omnid_bag_conversion script)
+├── DIFF_ENV - Python virtual environment for this repo (created by env_setup.bash)
+└── src
+    └── diffusion_policy - this repo
+    └── (other packages/repos) - optional. omnid_data_collection package is required to run omnid_bag_conversion script
+```
+### Environment setup
+I used Ubuntu 22.04 and ROS 2 Iron.
+
+Run the provided bash script to install the proper versions of packages. You could also experiment with installing the Ubuntu provided versions of the packages and seeing if they play nice. I chose to use this virtual environment instead to get as close to the conda environment provided in the original repository as possible without using conda.
+
+```
+cd ws
+./src/diffusion_policy/env_setup.bash DIFF_ENV
+```
+
+If running the `omnid_bag_conversion` script to convert ROS bags to `.zarr` format for training, the [`omnid_data_collection`](https://github.com/omnid/omnid_ml) package is required. Clone it (and all dependencies) into the `src` directory, then it will build when the rest of the ROS workspace is built.
 
 ## Important Commands
 
-TODO - convert data, train, run ROS node
+### Build ROS workspace
+```
+cd ws
+colcon build
+```
+
+### Convert ROS bags
+ROS bags should be in the `bags/combined` directory (although this can be changed in the `data_conversion` config files).
+
+```
+cd ws
+source DIFF_ENV/bin/activate
+cd src/diffusion_policy
+python3 diffusion_policy/scripts/omnid_bag_conversion.py --config=${data_conversion_config}
+```
+
+Substitutions:
+- `${data_conversion_config}` - name of the YAML file (without file extension) in `ws/src/diffusion_policy/diffusion_policy/config/task/data_conversion/` that describes the data conversion configuration to use.
+
+### Train
+Data should have been converted and placed in the `bags/converted` directory (although this can be changed in the `data_conversion` config files).
+
+```
+cd ws
+source DIFF_ENV/bin/activate
+cd src/diffusion_policy
+python3 train.py --config-name=${config_name} task=${task_name} training.device=${training_device} ${other_overrides}
+```
+
+Substitutions:
+- `${config_name}` - name of the YAML file (without file extension) in `ws/src/diffusion_policy/diffusion_policy/config/` that describes the diffusion model configuration to use.
+- `${task_name}` - name of the YAML file (without file extension) in `ws/src/diffusion_policy/diffusion_policy/config/task` that describes the task for which the model should be trained.
+- `${training_device}` - `cuda:0` or `cuda:1` depending on which GPU you want to use to train
+- `${other_overrides}` - (optional) other [hydra style overrides](https://hydra.cc/docs/advanced/override_grammar/basic/) to the configuration as desired.
+
+### Run ROS Node for Evaluation
+ROS workspace should have been built.
+
+```
+cd ws
+source install/setup.bash
+source DIFF_ENV/bin/activate
+ros2 run diffusion_policy action_predictor.py --ros-args -p checkpoint_path:=${checkpoint_path} ${other_parameter_overrides}
+```
+
+Substitutions:
+- `${checkpoint_path}` - path to the model checkpoint to load for action prediction.
+- `${other_parameter_overrides}` - any other parameters you'd like to set, in ROS parameter override syntax.
+
+More info on the node:
+
+#### Parameters
+- `checkpoint_path` - required, Checkpoint file (`.ckpt`) that contains model weights and config info.
+- `num_inference_diffusion_timesteps` - Number of timesteps the diffusion model uses for inference. Overrides only accepted if a DDIM noise scheduler is used.
+- `use_residuals` - If true, residuals are used. That is, the published action is the predicted action minus the actual current value for that action (from external sources)
+
+#### Publishers
+- `/model_details` (std_msgs/msg/String) - carries YAML formatted data about the model that is currently loaded.
+#### Subscribers
+- `/omnid1/joint/joint_states` (sensor_msgs/msg/JointState) - joint states for use with action residuals
+- Model inputs - subscribers are dynamically created for this data based on the model configuration.
+#### Service Servers
+- `start_inference` - call to start triggering inference with the model (on already when node is started).
+- `stop_inference` - call to stop triggering inference. Also stops action.
+- `start_action` - call to start performing the action (off when node is started).
+- `stop_action` - call to stop performing the action. Does not stop inference.
+
+## Defining new configurations
+If training configurations do not require different data formatting/inputs/outputs, settings can be changed by simply providing overrides when [calling the training command](#train).
+
+If new training configurations required different data format settings (ex: decimation rate) or different inputs/outputs to the model, two files will have to be created.
+
+### 1. Task Config
+Located at `ws/src/diffusion_policy/diffusion_policy/config/task/`, these task config files define task info for the model. Most of these files I left as essentially default based on the other config examples in the repo. It's important to set the `defaults.data_conversion` to the correct `data_conversion` config and match the observation/action dimensions with that `data_conversion` config.
+
+Use `omnid_image` and `omnid_lowdim` as examples.
+
+### 2. Data Conversion Config
+Located at `ws/src/diffusion_policy/diffusion_policy/config/task/data_conversion`, these data conversion config files define how data is converted from ROS bags to model inputs/outputs.
+
+I defined the format of this config file, it was not in this original repository. So here is an explanation of how it works:
+- `input_path`: path to ROS bags to convert (from the `ws/src/diffusion_policy` directory)
+- `output_path`: path to output the converted data (from the `ws/src/diffusion_policy` directory)
+- `rate` - rate at which to decimate the data. ROS messages faster than this rate will be averaged in the frames of the output data.
+- `image_shape` - shape (CHW) of images that are input into the model. Images in the ROS bags that are of different sizes will be converted to this shape (though the task/data_conversion configs are flexible enough if you want to define different images in different shapes).
+- `joint_states` - topics of the type `sensor_msgs/msg/JointState` to use for input/output data of the model. Data marked as `low_dim` will be used in the `low_dim` model input data. Data marked as `action` will be used as model output. Any data can be labeled as both. Follow the example format to properly configure.
+- `twists` - topics of the type `geometry_msgs/msg/Twist` to use for input/output data of the model. Data marked as `low_dim` will be used in the `low_dim` model input data. Data marked as `action` will be used as model output. Any data can be labeled as both. Follow the example format to properly configure.
+- `images` - topics of the type `sensor_msgs/msg/CompressedImage` to use for input to the model. Follow the example format to properly configure.
+
+Use `conversion_test` as an example for how to write this configuration files.
+
+Right now only topics of the types `sensor_msgs/msg/JointState`, `geometry_msgs/msg/Twist`, and `sensor_msgs/msg/CompressedImage` are supported. If new ROS message types must be used for inputs/outputs of the model, you'll have to define a new format in this config file and handle that format in the constructor for the [`ROSDataConverter` class](diffusion_policy/common/ros_util.py).
 
 ## Changelog
 For use by future researchers at Northwestern, here is a list of files in the repository I changed/added and the rationale why.
@@ -19,7 +132,7 @@ For use by future researchers at Northwestern, here is a list of files in the re
 - [env_setup.bash](env_setup.bash) - a quick and dirty bash script that (as of the writing of this README) works for setting up the proper Python virtual environment to run this repository on Ubuntu 22.04.
 - [package.xml](package.xml) - so this repository can be built as an `ament_cmake` ROS package.
 - [CMakeLists.txt](CMakeLists.txt) - so this repository can be built as an `ament_cmake` ROS package.
-- [__init__.py](diffusion_policy/__init__.py) - so code can be used as a Python module in, for example, the ROS `action_predictor` node.
+- [\_\_init\_\_.py](diffusion_policy/__init__.py) - so code can be used as a Python module in, for example, the ROS `action_predictor` node.
 - [ros_util.py](diffusion_policy/common/ros_util.py) - a module for ROS utilities for the `diffusion_policy` package. Most importantly, the `ROSDataConverter` class accepts input data frames of ROS messages and converts them into the NumPy array format expected as input to the diffusion policy model. This is used in the `action_predictor` node to convert data before performing an inference and in the `omnid_bag_conversion` script to convert data before saving it as a `.zarr` for training.
 - [data_conversion configs](diffusion_policy/config/task/data_conversion/) - these files determine how ROS messages from ROS bags are converted into the `.zarr` format expected as input for training this policy. They determine what data is input to/output from the model, and the rate at which the data is decimated. They are also read by the `action_predictor` node so it can automatically configure itself to subscribe to the proper ROS topics based on whatever model is loaded.
 - [omnid_bag_conversion.py](diffusion_policy/scripts/omnid_bag_conversion.py) - a script to convert ROS bags of training data to the `.zarr` format expected for training. Conversion is specified by the `data_conversion` config files. **This script depends on the `decimate` function from the `omnid_bag` module in the [`omnid_data_collection` package](https://github.com/omnid/omnid_ml)**, so it should be used in a terminal that has been sourced with that ROS package.

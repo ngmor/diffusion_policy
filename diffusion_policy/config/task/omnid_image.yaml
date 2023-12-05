@@ -4,7 +4,7 @@ defaults:
 
 name: omnid_image
 
-dataset_path: ../../bags/converted/conversion_test
+dataset_path: ../../bags/converted/${task.data_conversion.name}
 
 # Shapes must match the data conversion config file
 image_shape: &image_shape ${task.data_conversion.image_shape}
@@ -21,10 +21,10 @@ shape_meta: &shape_meta
       shape: *image_shape
       type: rgb
     low_dim_obs:
-      shape: [33] # TODO evaluate if possible
+      shape: [33]
       type: low_dim
   action:
-    shape: [3] # TODO evaluate if possible
+    shape: [3]
 
 env_runner:
   _target_: diffusion_policy.env_runner.omnid_image_runner.OmnidImageRunner
