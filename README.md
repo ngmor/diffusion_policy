@@ -2,6 +2,12 @@
 
 This repository contains updates to the diffusion policy code to be used with Northwestern's [omnidirectional mobile cobots](https://arxiv.org/abs/2206.14293).
 
+See the portfolio post on this project [here](https://ngmor.github.io/projects/diffusion-policy-assistive-action-prediction/).
+
+[Diffusion Policy](https://github.com/ngmor/diffusion_policy/assets/113186159/5f72862a-842a-4923-8a56-89841ed153e7)
+
+For a higher quality, [watch this video on YouTube](https://youtu.be/OzGdJI0vE44).
+
 ## Setup
 Follow the file structure/environment setup to get things running. The setup/dependencies are not super clean and could be improved.
 
